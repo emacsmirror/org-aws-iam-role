@@ -5,9 +5,9 @@
 ;; Author: William Bosch-Bello <williamsbosch@gmail.com>
 ;; Maintainer: William Bosch-Bello <williamsbosch@gmail.com>
 ;; Created: August 16, 2025
-;; Version: 1.2.2
-;; Package-Version: 1.2.2
-;; Package-Requires: ((emacs "29.1"))
+;; Version: 1.2.3
+;; Package-Version: 1.2.3
+;; Package-Requires: ((emacs "29.1") (async "1.9") (promise "1.1"))
 ;; Keywords: aws, iam, org, babel, tools
 ;; URL: https://github.com/will-abb/org-aws-iam-role
 ;; Homepage: https://github.com/will-abb/org-aws-iam-role
@@ -802,7 +802,7 @@ Argument RESOURCES-STR is a space-separated string of resource ARNs."
       :pb-allowed ,(if pb-detail (alist-get 'AllowedByPermissionsBoundary pb-detail) nil)
       :org-allowed ,(if org-detail (alist-get 'AllowedByOrganizations org-detail) nil)
       :policy-ids-str ,(mapconcat #'identity policy-ids ", ")
-      :missing-context-str ,(if missing-context (mapconcat 'identity missing-context ", ") "None")
+      :missing-context-str ,(if missing-context(mapconcat #'identity missing-context ", ")"None")
       :decision-face ,(if (string= decision "allowed") 'success #'error))))
 
 (defun org-aws-iam-role-simulate--insert-warning ()
