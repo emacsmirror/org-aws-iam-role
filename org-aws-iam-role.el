@@ -1009,7 +1009,7 @@ Removes all non-alphanumeric characters."
 (defun org-aws-iam-role--extract-all-permission-statements ()
   "Parse the current buffer to find and extract all permission policy statements.
 This function uses a state machine to iterate through headlines,
-finds the 'Permission Policies' section, and processes the JSON
+finds the `Permission Policies' section, and processes the JSON
 in each sub-section's source block. It returns a list of all
 processed statement alists."
   (let ((all-statements '())
@@ -1068,15 +1068,14 @@ ROLE-NAME is used for the buffer title."
 This function acts as an orchestrator, calling helper functions
 to extract policy statements and display them in a new buffer."
   (interactive)
-  (unless (eq major-mode 'org-mode)
-    (user-error "This command must be run from an Org mode buffer."))
+  (unless (derived-mode-p 'org-mode)
+    (user-error "This command must be run from an Org mode buffer"))
 
   (let ((all-statements (org-aws-iam-role--extract-all-permission-statements)))
     (if (null all-statements)
         (message "No policy statements were found under '** Permission Policies'.")
       (let ((role-name (org-aws-iam-role--get-role-name-from-buffer)))
         (org-aws-iam-role--create-and-show-json-buffer all-statements role-name)))))
-
 
 (provide 'org-aws-iam-role)
 ;;; org-aws-iam-role.el ends here
