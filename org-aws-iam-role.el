@@ -43,6 +43,8 @@
 ;;   CRUD (Create, Read, Update, Delete) operations.
 ;; - Built-in IAM Policy Simulator to test a role's permissions against
 ;;   specific AWS actions and resources.
+;; - View a combined JSON policy of all permission policies for easy export
+;;   or analysis.
 ;; - Asynchronous fetching of initial role and policy data for a fast UI.
 ;; - Safe by default: the role viewer buffer opens in read-only mode.
 ;; - Ability to easily switch between different AWS profiles.
@@ -53,6 +55,7 @@
 ;; In the IAM Role Viewer Buffer:
 ;; - C-c C-e: Toggle read-only mode to enable/disable editing.
 ;; - C-c C-s: Simulate the role's policies against specific actions.
+;; - C-c C-j: View a combined JSON of all permission policies.
 ;; - C-c C-c: Inside a source block, apply changes to AWS.
 ;; - C-c (:   Hide all property drawers.
 ;; - C-c ):   Reveal all property drawers.
@@ -549,6 +552,7 @@ ROLE-NAME is the name of the parent IAM role."
   (insert "\n** Keybindings\n")
   (insert "- =C-c C-e= :: Toggle read-only mode to allow/prevent edits.\n")
   (insert "- =C-c C-s= :: Simulate the role's policies against specific actions.\n")
+  (insert "- =C-c C-j= :: View a combined JSON of all permission policies.\n")
   (insert "- =C-c C-c= :: Inside a source block, apply changes to AWS.\n")
   (insert "- =C-c (= :: Hide all property drawers.\n")
   (insert "- =C-c )= :: Reveal all property drawers.\n\n"))
@@ -597,6 +601,7 @@ information."
   (with-current-buffer buf
     (local-set-key (kbd "C-c C-e") #'org-aws-iam-role-toggle-read-only)
     (local-set-key (kbd "C-c C-s") #'org-aws-iam-role-simulate-from-buffer)
+    (local-set-key (kbd "C-c C-j") #'org-aws-iam-role-combine-permissions-from-buffer)
     (local-set-key (kbd "C-c (") #'org-fold-hide-drawer-all)
     (local-set-key (kbd "C-c )") #'org-fold-show-all)
     (goto-char (point-min))    (when org-aws-iam-role-read-only-by-default
