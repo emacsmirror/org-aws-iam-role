@@ -14,6 +14,7 @@ Use header arguments for other actions:
 ** Keybindings
 - =C-c C-e= :: Toggle read-only mode to allow/prevent edits.
 - =C-c C-s= :: Simulate the role's policies against specific actions.
+- =C-c C-j= :: View a combined JSON of all permission policies.
 - =C-c C-c= :: Inside a source block, apply changes to AWS.
 - =C-c (= :: Hide all property drawers.
 - =C-c )= :: Reveal all property drawers.
@@ -274,9 +275,9 @@ Use header arguments for other actions:
 :Path: /
 :Description: Extra policy 2
 :Created: 2025-07-26T04:27:20+00:00
-:Updated: 2025-07-26T04:27:20+00:00
+:Updated: 2025-09-24T20:40:31+00:00
 :AttachmentCount: 1
-:DefaultVersion: v1
+:DefaultVersion: v3
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-extra-policy-2" :policy-type "customer-managed" :arn "arn:aws:iam::005343251202:policy/test-iam-package-extra-policy-2" :results output
 {
