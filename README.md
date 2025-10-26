@@ -19,6 +19,7 @@ This package uses Org Babel and the AWS CLI under the hood, allowing you to edit
       * Supports Trust Policies, Permissions Boundaries, Customer-Managed, AWS-Managed, and Inline policies.
   * **IAM Policy Simulator**: Test the role's permissions against a list of actions and resources using `iam:SimulatePrincipalPolicy` (`C-c C-s`).
   * **View Combined Permissions**: Generate a single, unified JSON policy from all permission policies (`Customer-Managed`, `AWS-Managed`, and `Inline`) for a holistic view (`C-c C-j`).
+  * **Get Service Last Accessed Details**: Fetches a report from AWS showing when services were last accessed by the role, using `iam:GenerateServiceLastAccessedDetails` (`C-c C-a`).
   * **Read-Only by Default**: Buffers open in a safe, read-only mode to prevent accidental changes. Toggle editing with a keypress.
   * **Org Babel Integration** using a custom `aws-iam` language for applying changes.
   * **Asynchronous Parallel Fetching** for fast initial loading of all policies.
@@ -45,6 +46,8 @@ This package uses Org Babel and the AWS CLI under the hood, allowing you to edit
       * `iam:PutRolePolicy` (to modify inline policies)
       * `iam:CreatePolicyVersion` (to modify managed policies)
       * `iam:SimulatePrincipalPolicy` (for the policy simulator)
+      * `iam:GenerateServiceLastAccessedDetails` (for last accessed report)
+      * `iam:GetServiceLastAccessedDetails` (for last accessed report)
 
 Emacs libraries used: `cl-lib`, `json`, `url-util`, `async`, `promise`, `ob-shell`.
 
@@ -65,14 +68,15 @@ Emacs libraries used: `cl-lib`, `json`, `url-util`, `async`, `promise`, `ob-shel
 
 ### Org Buffer Keybindings
 
-| Keybinding | Description                                         |
-| :--------- | :-------------------------------------------------- |
-| `C-c C-e`  | Toggle read-only mode to allow/prevent edits.       |
+| Keybinding | Description                                            |
+|:-----------|:-------------------------------------------------------|
+| `C-c C-e`  | Toggle read-only mode to allow/prevent edits.          |
 | `C-c C-s`  | Simulate the role's policies against specific actions. |
-| `C-c C-j`  | View a combined JSON of all permission policies.    |
-| `C-c C-c`  | Inside a source block, apply changes to AWS.        |
-| `C-c (`   | Hide all property drawers.                          |
-| `C-c )`   | Reveal all property drawers.                        |
+| `C-c C-j`  | View a combined JSON of all permission policies.       |
+| `C-c C-a`  | Get service last accessed details for the role.        |
+| `C-c C-c`  | Inside a source block, apply changes to AWS.           |
+| `C-c (`    | Hide all property drawers.                             |
+| `C-c )`    | Reveal all property drawers.                           |
 
 -----
 

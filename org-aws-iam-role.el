@@ -5,8 +5,8 @@
 ;; Author: William Bosch-Bello <williamsbosch@gmail.com>
 ;; Maintainer: William Bosch-Bello <williamsbosch@gmail.com>
 ;; Created: August 16, 2025
-;; Version: 1.3.0
-;; Package-Version: 1.3.0
+;; Version: 1.4.0
+;; Package-Version: 1.4.0
 ;; Package-Requires: ((emacs "29.1") (async "1.9") (promise "1.1"))
 ;; Keywords: aws, iam, org, babel, tools
 ;; URL: https://github.com/will-abb/org-aws-iam-role
@@ -56,6 +56,7 @@
 ;; - C-c C-e: Toggle read-only mode to enable/disable editing.
 ;; - C-c C-s: Simulate the role's policies against specific actions.
 ;; - C-c C-j: View a combined JSON of all permission policies.
+;; - C-c C-a: Get service last accessed details for the role.
 ;; - C-c C-c: Inside a source block, apply changes to AWS.
 ;; - C-c (:   Hide all property drawers.
 ;; - C-c ):   Reveal all property drawers.
@@ -553,6 +554,7 @@ ROLE-NAME is the name of the parent IAM role."
   (insert "- =C-c C-e= :: Toggle read-only mode to allow/prevent edits.\n")
   (insert "- =C-c C-s= :: Simulate the role's policies against specific actions.\n")
   (insert "- =C-c C-j= :: View a combined JSON of all permission policies.\n")
+  (insert "- =C-c C-a= :: Get service last accessed details for the role.\n")
   (insert "- =C-c C-c= :: Inside a source block, apply changes to AWS.\n")
   (insert "- =C-c (= :: Hide all property drawers.\n")
   (insert "- =C-c )= :: Reveal all property drawers.\n\n"))
@@ -602,6 +604,7 @@ information."
     (local-set-key (kbd "C-c C-e") #'org-aws-iam-role-toggle-read-only)
     (local-set-key (kbd "C-c C-s") #'org-aws-iam-role-simulate-from-buffer)
     (local-set-key (kbd "C-c C-j") #'org-aws-iam-role-combine-permissions-from-buffer)
+    (local-set-key (kbd "C-c C-a") #'org-aws-iam-role-get-last-accessed)
     (local-set-key (kbd "C-c (") #'org-fold-hide-drawer-all)
     (local-set-key (kbd "C-c )") #'org-fold-show-all)
     (goto-char (point-min))    (when org-aws-iam-role-read-only-by-default
@@ -1081,6 +1084,94 @@ to extract policy statements and display them in a new buffer."
         (message "No policy statements were found under '** Permission Policies'.")
       (let ((role-name (org-aws-iam-role--get-role-name-from-buffer)))
         (org-aws-iam-role--create-and-show-json-buffer all-statements role-name)))))
+
+;;;;; Last Accessed Details ;;;;;
+
+(defun org-aws-iam-role--show-last-accessed-json (json-string role-arn)
+  "Display the final JSON-STRING in a new buffer for ROLE-ARN."
+  (let* ((role-name (if role-arn
+                        (car (last (split-string role-arn "/")))
+                      "unknown-role"))
+         (timestamp (format-time-string "%Y%m%d-%H%M%S"))
+         (buf (get-buffer-create
+               (format "*IAM Last Accessed: %s <%s>*" role-name timestamp))))
+    (with-current-buffer buf
+      (erase-buffer)
+      (insert json-string)
+      (condition-case nil
+          (json-pretty-print-buffer)
+        (error (message "Warning: could not pretty-print JSON")))
+      (goto-char (point-min))
+      (when (fboundp 'json-mode)
+        (json-mode)))
+    (pop-to-buffer buf)))
+
+(defun org-aws-iam-role--generate-last-accessed-job (role-arn)
+  "Start the `generate-service-last-accessed-details` job for ROLE-ARN.
+Returns the JobId string."
+  (message "Starting generation for last accessed report for %s..." role-arn)
+  (let* ((cmd (format "aws iam generate-service-last-accessed-details --arn %s --granularity ACTION_LEVEL --output json%s"
+                      (shell-quote-argument role-arn)
+                      (org-aws-iam-role--cli-profile-arg)))
+         (json-result (shell-command-to-string cmd))
+         (job-id (alist-get 'JobId (json-parse-string json-result :object-type 'alist))))
+    (unless (and job-id (stringp job-id) (not (string-empty-p job-id)))
+      (user-error "Failed to get JobId from AWS: %s" json-result))
+    (message "Report job started (JobId: %s). Polling for results... (This will freeze Emacs)" job-id)
+    job-id))
+
+(defun org-aws-iam-role--poll-last-accessed-job (job-id)
+  "Poll the `get-service-last-accessed-details` job for JOB-ID.
+Returns the final JSON string on `COMPLETED`, or errors out."
+  (let ((final-json nil)
+        (retries 12)
+        (poll-cmd (format "aws iam get-service-last-accessed-details --job-id %s --output json%s"
+                          (shell-quote-argument job-id)
+                          (org-aws-iam-role--cli-profile-arg))))
+    (while (and (not final-json) (> retries 0))
+      (let* ((poll-result (shell-command-to-string poll-cmd))
+             (parsed (condition-case nil
+                         (json-parse-string poll-result :object-type 'alist)
+                       (error nil)))
+             (status (and parsed (alist-get 'JobStatus parsed))))
+        (cond
+         ((string= status "COMPLETED")
+          (message "Job complete!")
+          (setq final-json poll-result))
+         ((string= status "FAILED")
+          (user-error "AWS Job failed: %s" poll-result))
+         ((string= status "IN_PROGRESS")
+          (setq retries (1- retries))
+          (message "Job in progress... polling again in 5s. (Retries left: %d)" retries)
+          (sleep-for 5))
+         (t
+          (user-error "Invalid job status or JSON: %s" (or status poll-result))))))
+    (unless final-json
+      (user-error "Timeout waiting for last-accessed-details job"))
+    final-json))
+
+;;;###autoload
+(defun org-aws-iam-role-get-last-accessed (&optional role-arn)
+  "Generate and display the service last accessed details.
+If ROLE-ARN is nil (e.g., when called interactively),
+find it from the current buffer's ARN property.
+This is a synchronous (blocking) operation and will freeze
+Emacs for up to a minute while polling for results."
+  (interactive
+   ;; This block runs when called interactively
+   (list
+    (save-excursion
+      (goto-char (point-min))
+      (if (re-search-forward "^:ARN:[ \t]+\\(arn:aws:iam::[^ \n\r]*\\)$" nil t)
+          (match-string 1)
+        (user-error "Could not find a valid Role ARN in this buffer")))))
+
+  (unless (and role-arn (stringp role-arn))
+    (user-error "No valid Role ARN found or provided"))
+
+  (let* ((job-id (org-aws-iam-role--generate-last-accessed-job role-arn))
+         (final-json (org-aws-iam-role--poll-last-accessed-job job-id)))
+    (org-aws-iam-role--show-last-accessed-json final-json role-arn)))
 
 (provide 'org-aws-iam-role)
 ;;; org-aws-iam-role.el ends here
