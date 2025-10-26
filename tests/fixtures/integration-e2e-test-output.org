@@ -15,6 +15,7 @@ Use header arguments for other actions:
 - =C-c C-e= :: Toggle read-only mode to allow/prevent edits.
 - =C-c C-s= :: Simulate the role's policies against specific actions.
 - =C-c C-j= :: View a combined JSON of all permission policies.
+- =C-c C-a= :: Get service last accessed details for the role.
 - =C-c C-c= :: Inside a source block, apply changes to AWS.
 - =C-c (= :: Hide all property drawers.
 - =C-c )= :: Reveal all property drawers.
@@ -25,12 +26,12 @@ Use header arguments for other actions:
 :RoleID: AROAQCPT3RMBCBVAKQAPT
 :Path: /
 :Created: 2025-07-26T04:27:20+00:00
-:MaxSessionDuration: 3600
-:Description: nil
+:MaxSessionDuration: 7200
+:Description: test edit
 :PermissionsBoundaryArn: arn:aws:iam::005343251202:policy/DevOpsPermBoundary
-:LastUsedDate: nil
-:LastUsedRegion: nil
-:Tags: {"environment":"personal","managed":"terraform","repo":"aws-iam-mode/terraform/main.tf","user_id_of_creator":"williseedAdminIDC","assumed_role_of_creator":"AWSReservedSSO_personal-full-admin_a401bb7d90ea7c07"}
+:LastUsedDate: 2025-10-26T18:46:28+00:00
+:LastUsedRegion: us-east-1
+:Tags: {"environment":"personal","managed":"terraform","repo":"aws-iam-mode/terraform/main.tf","user_id_of_creator":"williseedAdminIDC","assumed_role_of_creator":"AWSReservedSSO_personal-full-admin_a401bb7d90ea7c07","test":"test"}
 :END:
 ** Permission Policies
 *** AmazonSSMManagedInstanceCore
@@ -103,9 +104,9 @@ Use header arguments for other actions:
 :Path: /
 :Description: Provides read only access to CloudWatch.
 :Created: 2015-02-06T18:40:01+00:00
-:Updated: 2024-11-21T17:51:05+00:00
+:Updated: 2025-10-08T17:34:07+00:00
 :AttachmentCount: 1
-:DefaultVersion: v10
+:DefaultVersion: v12
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "CloudWatchReadOnlyAccess" :policy-type "aws-managed" :arn "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess" :results output
 {
@@ -120,6 +121,7 @@ Use header arguments for other actions:
         "application-signals:Get*",
         "application-signals:List*",
         "autoscaling:Describe*",
+        "cloudtrail:ListChannels",
         "cloudwatch:BatchGet*",
         "cloudwatch:Describe*",
         "cloudwatch:GenerateQuery",
@@ -135,6 +137,18 @@ Use header arguments for other actions:
         "logs:StartLiveTail",
         "logs:StopLiveTail",
         "oam:ListSinks",
+        "observabilityadmin:GetCentralizationRuleForOrganization",
+        "observabilityadmin:ListCentralizationRulesForOrganization",
+        "observabilityadmin:GetTelemetryEvaluationStatus",
+        "observabilityadmin:GetTelemetryEvaluationStatusForOrganization",
+        "observabilityadmin:GetTelemetryRule",
+        "observabilityadmin:GetTelemetryRuleForOrganization",
+        "observabilityadmin:ListResourceTelemetry",
+        "observabilityadmin:ListResourceTelemetryForOrganization",
+        "observabilityadmin:ListTelemetryRules",
+        "observabilityadmin:ListTelemetryRulesForOrganization",
+        "observabilityadmin:GetTelemetryEnrichmentStatus",
+        "observabilityadmin:ListTagsForResource",
         "sns:Get*",
         "sns:List*",
         "rum:BatchGet*",
@@ -164,6 +178,32 @@ Use header arguments for other actions:
       "Effect": "Allow",
       "Action": "iam:GetRole",
       "Resource": "arn:aws:iam::*:role/aws-service-role/application-signals.cloudwatch.amazonaws.com/AWSServiceRoleForCloudWatchApplicationSignals"
+    },
+    {
+      "Sid": "CloudWatchCloudTrailPermissions",
+      "Effect": "Allow",
+      "Action": [
+        "cloudtrail:GetChannel"
+      ],
+      "Resource": "arn:aws:cloudtrail:*:*:channel/aws-service-channel/application-signals/*"
+    },
+    {
+      "Sid": "CloudWatchServiceQuotaPermissions",
+      "Effect": "Allow",
+      "Action": [
+        "servicequotas:GetServiceQuota"
+      ],
+      "Resource": [
+        "arn:aws:servicequotas:*:*:s3/*",
+        "arn:aws:servicequotas:*:*:dynamodb/*",
+        "arn:aws:servicequotas:*:*:kinesis/*",
+        "arn:aws:servicequotas:*:*:sns/*",
+        "arn:aws:servicequotas:*:*:bedrock/*",
+        "arn:aws:servicequotas:*:*:lambda/*",
+        "arn:aws:servicequotas:*:*:fargate/*",
+        "arn:aws:servicequotas:*:*:elasticloadbalancing/*",
+        "arn:aws:servicequotas:*:*:ec2/*"
+      ]
     }
   ]
 }
@@ -701,7 +741,7 @@ Use header arguments for other actions:
     {
       "Effect": "Allow",
       "Principal": {
-        "Service": "sts.amazonaws.com"
+        "AWS": "arn:aws:iam::005343251202:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_personal-full-admin_a401bb7d90ea7c07"
       },
       "Action": "sts:AssumeRole"
     }
