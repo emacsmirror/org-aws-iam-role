@@ -56,6 +56,7 @@
 ;; - C-c C-e: Toggle read-only mode to enable/disable editing.
 ;; - C-c C-s: Simulate the role's policies against specific actions.
 ;; - C-c C-j: View a combined JSON of all permission policies.
+;; - C-c C-a: Get service last accessed details for the role.
 ;; - C-c C-c: Inside a source block, apply changes to AWS.
 ;; - C-c (:   Hide all property drawers.
 ;; - C-c ):   Reveal all property drawers.
@@ -553,6 +554,7 @@ ROLE-NAME is the name of the parent IAM role."
   (insert "- =C-c C-e= :: Toggle read-only mode to allow/prevent edits.\n")
   (insert "- =C-c C-s= :: Simulate the role's policies against specific actions.\n")
   (insert "- =C-c C-j= :: View a combined JSON of all permission policies.\n")
+  (insert "- =C-c C-a= :: Get service last accessed details for the role.\n")
   (insert "- =C-c C-c= :: Inside a source block, apply changes to AWS.\n")
   (insert "- =C-c (= :: Hide all property drawers.\n")
   (insert "- =C-c )= :: Reveal all property drawers.\n\n"))
@@ -602,7 +604,7 @@ information."
     (local-set-key (kbd "C-c C-e") #'org-aws-iam-role-toggle-read-only)
     (local-set-key (kbd "C-c C-s") #'org-aws-iam-role-simulate-from-buffer)
     (local-set-key (kbd "C-c C-j") #'org-aws-iam-role-combine-permissions-from-buffer)
-    (local-set-key (kbd "C-c C-a") #'org-aws-iam-role-get-last-accessed-from-buffer)
+    (local-set-key (kbd "C-c C-a") #'org-aws-iam-role-get-last-accessed)
     (local-set-key (kbd "C-c (") #'org-fold-hide-drawer-all)
     (local-set-key (kbd "C-c )") #'org-fold-show-all)
     (goto-char (point-min))    (when org-aws-iam-role-read-only-by-default
