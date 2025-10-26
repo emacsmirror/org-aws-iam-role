@@ -1107,7 +1107,7 @@ to extract policy statements and display them in a new buffer."
     (pop-to-buffer buf)))
 
 (defun org-aws-iam-role--generate-last-accessed-job (role-arn)
-  "Start the 'generate-service-last-accessed-details' job.
+  "Start the `generate-service-last-accessed-details` job for ROLE-ARN.
 Returns the JobId string."
   (message "Starting generation for last accessed report for %s..." role-arn)
   (let* ((cmd (format "aws iam generate-service-last-accessed-details --arn %s --granularity ACTION_LEVEL --output json%s"
@@ -1121,8 +1121,8 @@ Returns the JobId string."
     job-id))
 
 (defun org-aws-iam-role--poll-last-accessed-job (job-id)
-  "Poll the 'get-service-last-accessed-details' job for JOB-ID.
-Returns the final JSON string on 'COMPLETED', or errors out."
+  "Poll the `get-service-last-accessed-details` job for JOB-ID.
+Returns the final JSON string on `COMPLETED`, or errors out."
   (let ((final-json nil)
         (retries 12)
         (poll-cmd (format "aws iam get-service-last-accessed-details --job-id %s --output json%s"
@@ -1145,20 +1145,31 @@ Returns the final JSON string on 'COMPLETED', or errors out."
           (message "Job in progress... polling again in 5s. (Retries left: %d)" retries)
           (sleep-for 5))
          (t
-          (user-error "Invalid job status or JSON: %s" (or status poll-result)))))) ; end let* and while
+          (user-error "Invalid job status or JSON: %s" (or status poll-result))))))
     (unless final-json
-      (user-error "Timeout waiting for last-accessed-details job."))
+      (user-error "Timeout waiting for last-accessed-details job"))
     final-json))
 
 ;;;###autoload
-(defun org-aws-iam-role-get-last-accessed (role-object)
-  "Generate and display the service last accessed details for ROLE-OBJECT.
-ROLE-OBJECT must be an instance of `org-aws-iam-role', containing at least its ARN.
+(defun org-aws-iam-role-get-last-accessed (&optional role-arn)
+  "Generate and display the service last accessed details.
+If ROLE-ARN is nil (e.g., when called interactively),
+find it from the current buffer's ARN property.
 This is a synchronous (blocking) operation and will freeze
 Emacs for up to a minute while polling for results."
-  (interactive)
-  (let* ((role-arn (org-aws-iam-role-arn role-object))
-         (job-id (org-aws-iam-role--generate-last-accessed-job role-arn))
+  (interactive
+   ;; This block runs when called interactively
+   (list
+    (save-excursion
+      (goto-char (point-min))
+      (if (re-search-forward "^:ARN:[ \t]+\\(arn:aws:iam::[^ \n\r]*\\)$" nil t)
+          (match-string 1)
+        (user-error "Could not find a valid Role ARN in this buffer")))))
+
+  (unless (and role-arn (stringp role-arn))
+    (user-error "No valid Role ARN found or provided"))
+
+  (let* ((job-id (org-aws-iam-role--generate-last-accessed-job role-arn))
          (final-json (org-aws-iam-role--poll-last-accessed-job job-id)))
     (org-aws-iam-role--show-last-accessed-json final-json role-arn)))
 
