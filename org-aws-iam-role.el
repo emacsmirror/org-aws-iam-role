@@ -5,8 +5,8 @@
 ;; Author: William Bosch-Bello <williamsbosch@gmail.com>
 ;; Maintainer: William Bosch-Bello <williamsbosch@gmail.com>
 ;; Created: August 16, 2025
-;; Version: 1.4.0
-;; Package-Version: 1.4.0
+;; Version: 1.5.0
+;; Package-Version: 1.5.0
 ;; Package-Requires: ((emacs "29.1") (async "1.9") (promise "1.1"))
 ;; Keywords: aws, iam, org, babel, tools
 ;; URL: https://github.com/will-abb/org-aws-iam-role
@@ -57,6 +57,7 @@
 ;; - C-c C-s: Simulate the role's policies against specific actions.
 ;; - C-c C-j: View a combined JSON of all permission policies.
 ;; - C-c C-a: Get service last accessed details for the role.
+;; - C-c C-m: Find the last modified date for the role or its policies.")
 ;; - C-c C-c: Inside a source block, apply changes to AWS.
 ;; - C-c (:   Hide all property drawers.
 ;; - C-c ):   Reveal all property drawers.
@@ -556,6 +557,7 @@ ROLE-NAME is the name of the parent IAM role."
   (insert "- =C-c C-j= :: View a combined JSON of all permission policies.\n")
   (insert "- =C-c C-a= :: Get service last accessed details for the role.\n")
   (insert "- =C-c C-c= :: Inside a source block, apply changes to AWS.\n")
+  (insert "- =C-c C-m= :: Find the last modified date for the role or its policies.\n")
   (insert "- =C-c (= :: Hide all property drawers.\n")
   (insert "- =C-c )= :: Reveal all property drawers.\n\n"))
 
@@ -605,6 +607,7 @@ information."
     (local-set-key (kbd "C-c C-s") #'org-aws-iam-role-simulate-from-buffer)
     (local-set-key (kbd "C-c C-j") #'org-aws-iam-role-combine-permissions-from-buffer)
     (local-set-key (kbd "C-c C-a") #'org-aws-iam-role-get-last-accessed)
+    (local-set-key (kbd "C-c C-m") #'org-aws-iam-role-get-last-modified)
     (local-set-key (kbd "C-c (") #'org-fold-hide-drawer-all)
     (local-set-key (kbd "C-c )") #'org-fold-show-all)
     (goto-char (point-min))    (when org-aws-iam-role-read-only-by-default
@@ -1014,6 +1017,31 @@ Removes all non-alphanumeric characters."
   (when s
     (replace-regexp-in-string "[^a-zA-Z0-9]" "" s)))
 
+(defun org-aws-iam-role--parse-modified-date (date-string)
+  "Parse a DATE-STRING into an Emacs time list.
+Return nil if the string is nil, \"nil\", or invalid."
+  (when (and date-string (not (string-empty-p date-string)) (not (string= "nil" date-string)))
+    (message "-> Parsing date string: %s" date-string)
+    (let ((parsed-time (condition-case err
+                           (parse-time-string date-string)
+                         (error (message "-> PARSE FAILED: %s" (error-message-string err))
+                                nil))))
+      (if parsed-time
+          (message "-> Parse OK (DECODED): %s" parsed-time)
+        (message "-> Parse FAILED or string was invalid."))
+      parsed-time)))
+
+(defun org-aws-iam-role--time-greater-p (time-a time-b)
+  "Return t if TIME-A is later than TIME-B.
+Both are time values like (HIGH LOW . USEC)."
+  (let ((high-a (car time-a))
+        (low-a (cadr time-a))
+        (high-b (car time-b))
+        (low-b (cadr time-b)))
+    (or (> high-a high-b)
+        (and (= high-a high-b)
+             (> low-a low-b)))))
+
 (defun org-aws-iam-role--extract-all-permission-statements ()
   "Parse the current buffer to find and extract all permission policy statements.
 This function uses a state machine to iterate through headlines,
@@ -1084,6 +1112,78 @@ to extract policy statements and display them in a new buffer."
         (message "No policy statements were found under '** Permission Policies'.")
       (let ((role-name (org-aws-iam-role--get-role-name-from-buffer)))
         (org-aws-iam-role--create-and-show-json-buffer all-statements role-name)))))
+
+;;;###autoload
+(defun org-aws-iam-role-get-last-modified ()
+  "Find the most recent :Created: or :Updated: timestamp in the buffer.
+This parses all property drawers to find the latest date,
+which represents the last known modification time of the role or
+one of its policies."
+  (interactive)
+  (unless (derived-mode-p 'org-mode)
+    (user-error "This command must be run from an Org mode buffer"))
+
+  (message "--- DEBUG: Finding last modified date (please check *Messages* buffer) ---")
+  (let* ((tree (org-element-parse-buffer))
+         (all-dates (org-aws-iam-role--collect-dates-from-buffer tree)))
+    (org-aws-iam-role--find-latest-date all-dates)))
+
+(defun org-aws-iam-role--collect-dates-from-buffer (tree)
+  "Collect all :Created: and :Updated: dates from the parse TREE."
+  (let ((all-dates '()))
+    (message "Step 1: Scanning buffer for all :Created: and :Updated: properties...")
+    (org-element-map tree 'property-drawer
+      (lambda (drawer)
+        (org-element-map (org-element-contents drawer) 'node-property
+          (lambda (prop)
+            (let ((key (org-element-property :key prop))
+                  (value (org-element-property :value prop)))
+              (when (and value (or (string= key "Created") (string= key "Updated")))
+                (message "Found property: Key=%s, Value=%s" key value)
+                (let ((parsed-date (org-aws-iam-role--parse-modified-date value)))
+                  (when parsed-date
+                    (message "==> Adding valid DECODED list: %s" parsed-date)
+                    (push parsed-date all-dates)))))))))
+    (message "Step 1 complete.")
+    all-dates))
+
+(defun org-aws-iam-role--find-latest-date (all-dates)
+  "Find the latest date in ALL-DATES and return it as a formatted string."
+  (message "--------------------------------------------------")
+  (message "Step 2: Finding the latest date from the collected list...")
+  (if (null all-dates)
+      (message "DEBUG: No valid :Created: or :Updated: dates were found.")
+    (let* ((latest-time-DECODED (car all-dates))
+           (time-val-current nil)
+           (time-val-latest nil)
+           (is-greater nil)
+           (final-time-VALUE nil))
+      (message "Found %d valid dates." (length all-dates))
+      (message "Initial latest-time (DECODED) set to: %s" latest-time-DECODED)
+      (message "Starting loop to compare all dates...")
+      (dolist (current-date-DECODED (cdr all-dates))
+        (message "Loop: Comparing (DECODED) latest (%s) with new (%s)" latest-time-DECODED current-date-DECODED)
+        (message "Loop: Converting both to time values for comparison...")
+        (setq time-val-current (apply #'encode-time current-date-DECODED))
+        (setq time-val-latest (apply #'encode-time latest-time-DECODED))
+        (message "Loop: time-val (new) = %s" time-val-current)
+        (message "Loop: time-val (latest) = %s" time-val-latest)
+        (setq is-greater (org-aws-iam-role--time-greater-p time-val-current time-val-latest))
+        (message "Loop: Is new date greater? %s" is-greater)
+        (when is-greater
+          (setq latest-time-DECODED current-date-DECODED)
+          (message "==> NEW LATEST TIME (DECODED) set to: %s" latest-time-DECODED)))
+      (message "Loop complete.")
+      (message "--------------------------------------------------")
+      (message "Step 3: Formatting final result...")
+      (message "Final latest-time (DECODED) before format: %s" latest-time-DECODED)
+      (message "Converting final decoded list to a time value for formatting...")
+      (setq final-time-VALUE (apply #'encode-time latest-time-DECODED))
+      (message "Final time-VALUE is: %s" final-time-VALUE)
+      (let ((latest-date-string (format-time-string "%FT%T%z" final-time-VALUE)))
+        (message "Final formatted date string: %s" latest-date-string)
+        (message "--- DEBUG END ---")
+        (message "Last modification date found: %s" latest-date-string)))))
 
 ;;;;; Last Accessed Details ;;;;;
 
