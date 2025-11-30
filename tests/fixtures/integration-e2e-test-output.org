@@ -3,21 +3,23 @@
 All actions are performed by executing an =aws-iam= source block with =C-c C-c=.
 You will be asked to confirm before any change is applied.
 
-- *To Create or Update an Inline Policy*, simply write or edit its source block and execute it. No special flag is needed.
-- *To Update any other policy*, edit its source block and execute.
+- *To Create a New Policy*: Provide a unique =:policy-name= and optional =:path=. If the ARN does not exist, it will be created.
+- *To Update a Policy*: Edit the JSON. If the policy has reached the version limit, you will be offered to delete the oldest version.
+- *To Tag*: Add the =:tags= header. Tagging is applied /before/ updates.
 
-Use header arguments for other actions:
-- =:create t=     :: Creates a new *customer-managed* policy.
-- =:delete t=     :: Deletes a policy. For managed policies, this will fail if the policy is still attached to any role, user, or group.
-- =:detach t=     :: Detaches a *managed* policy from the current role.
+Use header arguments for specific actions:
+- =:delete t=     :: Deletes the policy. If versions exist, you will be asked to recursively delete them.
+- =:detach t=     :: Detaches the policy from the current role. Can be combined with =:delete t=.
+- =:tags=         :: A string of tags (e.g. "Key=Owner,Value=Dev Key=Stage,Value=Prod").
+- =:path=         :: The IAM path for creation (e.g. "/service-role/"). Defaults to "/".
 
 ** Keybindings
 - =C-c C-e= :: Toggle read-only mode to allow/prevent edits.
 - =C-c C-s= :: Simulate the role's policies against specific actions.
 - =C-c C-j= :: View a combined JSON of all permission policies.
 - =C-c C-a= :: Get service last accessed details for the role.
-- =C-c C-c= :: Inside a source block, apply changes to AWS.
 - =C-c C-m= :: Find the last modified date for the role or its policies.
+- =C-c C-c= :: Inside a source block, apply changes to AWS.
 - =C-c (= :: Hide all property drawers.
 - =C-c )= :: Reveal all property drawers.
 
@@ -46,6 +48,7 @@ Use header arguments for other actions:
 :Updated: 2019-05-23T16:54:21+00:00
 :AttachmentCount: 2
 :DefaultVersion: v2
+:Tags: null
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "AmazonSSMManagedInstanceCore" :policy-type "aws-managed" :arn "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore" :results output
 {
@@ -108,6 +111,7 @@ Use header arguments for other actions:
 :Updated: 2025-11-20T19:34:11+00:00
 :AttachmentCount: 1
 :DefaultVersion: v13
+:Tags: null
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "CloudWatchReadOnlyAccess" :policy-type "aws-managed" :arn "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess" :results output
 {
@@ -232,6 +236,7 @@ Use header arguments for other actions:
 :Updated: 2023-08-10T21:31:39+00:00
 :AttachmentCount: 1
 :DefaultVersion: v3
+:Tags: null
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "AmazonS3ReadOnlyAccess" :policy-type "aws-managed" :arn "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess" :results output
 {
@@ -262,6 +267,7 @@ Use header arguments for other actions:
 :Updated: 2024-06-26T09:38:00+00:00
 :AttachmentCount: 1
 :DefaultVersion: v1
+:Tags: null
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "AWSQuickSetupPatchPolicyBaselineAccess" :policy-type "aws-managed" :arn "arn:aws:iam::aws:policy/AWSQuickSetupPatchPolicyBaselineAccess" :results output
 {
@@ -307,6 +313,7 @@ Use header arguments for other actions:
 :Updated: 2025-07-26T04:27:20+00:00
 :AttachmentCount: 1
 :DefaultVersion: v1
+:Tags: {"environment":"personal","managed":"terraform","repo":"aws-iam-mode/terraform/main.tf"}
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-example-policy-name" :policy-type "customer-managed" :arn "arn:aws:iam::005343251202:policy/test-iam-package-example-policy-name" :results output
 {
@@ -332,6 +339,7 @@ Use header arguments for other actions:
 :Updated: 2025-11-30T16:43:37+00:00
 :AttachmentCount: 1
 :DefaultVersion: v1
+:Tags: {"environment":"personal","managed":"terraform","repo":"aws-iam-mode/terraform/main.tf"}
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-extra-policy-3" :policy-type "customer-managed" :arn "arn:aws:iam::005343251202:policy/test-iam-package-extra-policy-3" :results output
 {
@@ -356,6 +364,7 @@ Use header arguments for other actions:
 :Updated: 2025-07-26T04:27:20+00:00
 :AttachmentCount: 1
 :DefaultVersion: v1
+:Tags: {"environment":"personal","managed":"terraform","repo":"aws-iam-mode/terraform/main.tf"}
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-extra-policy-1" :policy-type "customer-managed" :arn "arn:aws:iam::005343251202:policy/test-iam-package-extra-policy-1" :results output
 {
@@ -380,6 +389,7 @@ Use header arguments for other actions:
 :Updated: 2025-09-24T20:40:31+00:00
 :AttachmentCount: 1
 :DefaultVersion: v3
+:Tags: {"environment":"personal","managed":"terraform","repo":"aws-iam-mode/terraform/main.tf"}
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-extra-policy-2" :policy-type "customer-managed" :arn "arn:aws:iam::005343251202:policy/test-iam-package-extra-policy-2" :results output
 {
@@ -404,6 +414,7 @@ Use header arguments for other actions:
 :Updated: nil
 :AttachmentCount: nil
 :DefaultVersion: nil
+:Tags: nil
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-inline1" :policy-type "inline" :arn "" :results output
 {
@@ -428,6 +439,7 @@ Use header arguments for other actions:
 :Updated: nil
 :AttachmentCount: nil
 :DefaultVersion: nil
+:Tags: nil
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-inline10" :policy-type "inline" :arn "" :results output
 {
@@ -452,6 +464,7 @@ Use header arguments for other actions:
 :Updated: nil
 :AttachmentCount: nil
 :DefaultVersion: nil
+:Tags: nil
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-inline2" :policy-type "inline" :arn "" :results output
 {
@@ -476,6 +489,7 @@ Use header arguments for other actions:
 :Updated: nil
 :AttachmentCount: nil
 :DefaultVersion: nil
+:Tags: nil
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-inline3" :policy-type "inline" :arn "" :results output
 {
@@ -500,6 +514,7 @@ Use header arguments for other actions:
 :Updated: nil
 :AttachmentCount: nil
 :DefaultVersion: nil
+:Tags: nil
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-inline4" :policy-type "inline" :arn "" :results output
 {
@@ -524,6 +539,7 @@ Use header arguments for other actions:
 :Updated: nil
 :AttachmentCount: nil
 :DefaultVersion: nil
+:Tags: nil
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-inline5" :policy-type "inline" :arn "" :results output
 {
@@ -548,6 +564,7 @@ Use header arguments for other actions:
 :Updated: nil
 :AttachmentCount: nil
 :DefaultVersion: nil
+:Tags: nil
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-inline6" :policy-type "inline" :arn "" :results output
 {
@@ -572,6 +589,7 @@ Use header arguments for other actions:
 :Updated: nil
 :AttachmentCount: nil
 :DefaultVersion: nil
+:Tags: nil
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-inline7" :policy-type "inline" :arn "" :results output
 {
@@ -596,6 +614,7 @@ Use header arguments for other actions:
 :Updated: nil
 :AttachmentCount: nil
 :DefaultVersion: nil
+:Tags: nil
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-inline8" :policy-type "inline" :arn "" :results output
 {
@@ -620,6 +639,7 @@ Use header arguments for other actions:
 :Updated: nil
 :AttachmentCount: nil
 :DefaultVersion: nil
+:Tags: nil
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-inline9" :policy-type "inline" :arn "" :results output
 {
@@ -645,6 +665,7 @@ Use header arguments for other actions:
 :Updated: 2025-09-23T17:48:06+00:00
 :AttachmentCount: 0
 :DefaultVersion: v5
+:Tags: null
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "DevOpsPermBoundary" :policy-type "permissions-boundary" :arn "arn:aws:iam::005343251202:policy/DevOpsPermBoundary" :results output
 {
