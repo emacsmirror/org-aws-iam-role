@@ -458,6 +458,7 @@ Each bucket keeps the full alist for each policy item."
     (insert (format ":Updated: %s\n" (or (org-aws-iam-role-policy-update-date policy) "nil")))
     (insert (format ":AttachmentCount: %s\n" (or (org-aws-iam-role-policy-attachment-count policy) "nil")))
     (insert (format ":DefaultVersion: %s\n" (or (org-aws-iam-role-policy-default-version-id policy) "nil")))
+    (insert (format ":Tags: %s\n" (or (org-aws-iam-role--format-tags (org-aws-iam-role-policy-tags policy)) "nil")))
     (insert ":END:\n")
     (insert (format "#+BEGIN_SRC aws-iam :role-name \"%s\" :policy-name \"%s\" :policy-type \"%s\" :arn \"%s\" :results output\n"
                     role-name
