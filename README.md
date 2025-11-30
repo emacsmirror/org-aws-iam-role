@@ -17,6 +17,10 @@ This package uses Org Babel and the AWS CLI under the hood, allowing you to edit
   * **Browse and Inspect IAM Roles** via an interactive prompt.
   * **Modify IAM Policies**: Edit policies directly in the Org buffer and apply changes by executing the source block (`C-c C-c`).
       * Supports Trust Policies, Permissions Boundaries, Customer-Managed, AWS-Managed, and Inline policies.
+  * **Smart Upsert Logic**: Automatically detects if a policy needs to be created or updated based on the Name/Path/ARN.
+  * **Version Management**: If a managed policy hits the AWS version limit (usually 5), the package offers to delete the oldest non-default version and retry the update automatically.
+  * **Tagging & Paths**: Support for adding tags (`:tags`) and specifying IAM paths (`:path`) during creation or updates.
+  * **Sequential Operations**: Support for detaching and deleting policies in a single execution (`:detach t :delete t`).
   * **IAM Policy Simulator**: Test the role's permissions against a list of actions and resources using `iam:SimulatePrincipalPolicy` (`C-c C-s`).
   * **View Combined Permissions**: Generate a single, unified JSON policy from all permission policies (`Customer-Managed`, `AWS-Managed`, and `Inline`) for a holistic view (`C-c C-j`).
   * **Get Service Last Accessed Details**: Fetches a report from AWS showing when services were last accessed by the role, using `iam:GenerateServiceLastAccessedDetails` (`C-c C-a`).
@@ -45,7 +49,11 @@ This package uses Org Babel and the AWS CLI under the hood, allowing you to edit
       * `iam:GetRolePolicy`
       * `iam:UpdateAssumeRolePolicy` (to modify trust policies)
       * `iam:PutRolePolicy` (to modify inline policies)
+      * `iam:CreatePolicy` (to create new policies)
       * `iam:CreatePolicyVersion` (to modify managed policies)
+      * `iam:DeletePolicy` and `iam:DeletePolicyVersion`
+      * `iam:AttachRolePolicy` and `iam:DetachRolePolicy`
+      * `iam:TagRole` and `iam:TagPolicy`
       * `iam:SimulatePrincipalPolicy` (for the policy simulator)
       * `iam:GenerateServiceLastAccessedDetails` (for last accessed report)
       * `iam:GetServiceLastAccessedDetails` (for last accessed report)
@@ -66,6 +74,16 @@ Emacs libraries used: `cl-lib`, `json`, `url-util`, `async`, `promise`, `ob-shel
     c.  Press `C-c C-c` inside the block to apply the changes to AWS.
     d.  View the success or failure message in the `#+RESULTS:` block that appears.
 5.  To test the role's effective permissions, press `C-c C-s` at any time to open the IAM policy simulator.
+
+### Babel Header Arguments
+
+| Header Argument | Description                                                | Example                |
+|:----------------|:-----------------------------------------------------------|:-----------------------|
+| `:policy-name`  | Required for creation. The name of the policy.             | `"MyPolicy"`           |
+| `:path`         | Optional. IAM path for the policy (creation only).         | `"/service-role/"`     |
+| `:tags`         | Optional. Space-separated Key=Value pairs.                 | `"Key=Env,Value=Prod"` |
+| `:detach t`     | Detach the policy from the role.                           | `:detach t`            |
+| `:delete t`     | Delete the policy. Recursively deletes versions if needed. | `:delete t`            |
 
 ### Org Buffer Keybindings
 
@@ -91,3 +109,7 @@ Optional variables for customizing behavior:
 (setq org-aws-iam-role-read-only-by-default t) ;; Open buffers in read-only mode
 (setq org-aws-iam-role-show-folded-by-default t) ;; Show Org buffer folded by default
 (setq org-aws-iam-role-fullscreen nil) ;; Prevent the buffer from taking the full frame
+```
+
+To change the profile at runtime, you can run:
+`M-x org-aws-iam-role-set-profile`

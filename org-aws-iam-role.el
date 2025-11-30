@@ -38,17 +38,18 @@
 ;; - Interactive browsing and selection of IAM roles.
 ;; - Full display of all policy types: Trust Policy, Permissions Boundary,
 ;;   AWS-Managed, Customer-Managed, and Inline policies.
-;; - Direct modification of any policy through Org Babel source blocks. Use
-;;   header arguments like `:create`, `:delete`, or `:detach` for full
-;;   CRUD (Create, Read, Update, Delete) operations.
+;; - Direct modification via Org Babel. Supports "Upsert" logic: automatically
+;;   creates policies if they don't exist, or updates them if they do.
+;; - Smart Version Management: Automatically offers to delete the oldest
+;;   policy version if the AWS version limit is reached during an update.
+;; - Advanced Header Arguments: Support for `:tags`, `:path`, and sequential
+;;   `:detach` + `:delete` operations.
 ;; - Built-in IAM Policy Simulator to test a role's permissions against
 ;;   specific AWS actions and resources.
-;; - View a combined JSON policy of all permission policies for easy export
-;;   or analysis.
+;; - View a combined JSON policy of all permission policies for easy export.
 ;; - Asynchronous fetching of initial role and policy data for a fast UI.
 ;; - Safe by default: the role viewer buffer opens in read-only mode.
 ;; - Ability to easily switch between different AWS profiles.
-;; - Clear feedback on command success or failure in Babel results blocks.
 
 ;; Keybindings:
 ;;
@@ -57,7 +58,7 @@
 ;; - C-c C-s: Simulate the role's policies against specific actions.
 ;; - C-c C-j: View a combined JSON of all permission policies.
 ;; - C-c C-a: Get service last accessed details for the role.
-;; - C-c C-m: Find the last modified date for the role or its policies.")
+;; - C-c C-m: Find the last modified date for the role or its policies.
 ;; - C-c C-c: Inside a source block, apply changes to AWS.
 ;; - C-c (:   Hide all property drawers.
 ;; - C-c ):   Reveal all property drawers.
@@ -541,19 +542,21 @@ ROLE-NAME is the name of the parent IAM role."
   (insert "** Applying Changes via Babel\n")
   (insert "All actions are performed by executing an =aws-iam= source block with =C-c C-c=.\n")
   (insert "You will be asked to confirm before any change is applied.\n")
-  (insert "\n- *To Create or Update an Inline Policy*, simply write or edit its source block and execute it. No special flag is needed.\n")
-  (insert "- *To Update any other policy*, edit its source block and execute.\n")
-  (insert "\nUse header arguments for other actions:\n")
-  (insert "- =:create t=     :: Creates a new *customer-managed* policy.\n")
-  (insert "- =:delete t=     :: Deletes a policy. For managed policies, this will fail if the policy is still attached to any role, user, or group.\n")
-  (insert "- =:detach t=     :: Detaches a *managed* policy from the current role.\n")
+  (insert "\n- *To Create a New Policy*: Provide a unique =:policy-name= and optional =:path=. If the ARN does not exist, it will be created.\n")
+  (insert "- *To Update a Policy*: Edit the JSON. If the policy has reached the version limit, you will be offered to delete the oldest version.\n")
+  (insert "- *To Tag*: Add the =:tags= header. Tagging is applied /before/ updates.\n")
+  (insert "\nUse header arguments for specific actions:\n")
+  (insert "- =:delete t=     :: Deletes the policy. If versions exist, you will be asked to recursively delete them.\n")
+  (insert "- =:detach t=     :: Detaches the policy from the current role. Can be combined with =:delete t=.\n")
+  (insert "- =:tags=         :: A string of tags (e.g. \"Key=Owner,Value=Dev Key=Stage,Value=Prod\").\n")
+  (insert "- =:path=         :: The IAM path for creation (e.g. \"/service-role/\"). Defaults to \"/\".\n")
   (insert "\n** Keybindings\n")
   (insert "- =C-c C-e= :: Toggle read-only mode to allow/prevent edits.\n")
   (insert "- =C-c C-s= :: Simulate the role's policies against specific actions.\n")
   (insert "- =C-c C-j= :: View a combined JSON of all permission policies.\n")
   (insert "- =C-c C-a= :: Get service last accessed details for the role.\n")
-  (insert "- =C-c C-c= :: Inside a source block, apply changes to AWS.\n")
   (insert "- =C-c C-m= :: Find the last modified date for the role or its policies.\n")
+  (insert "- =C-c C-c= :: Inside a source block, apply changes to AWS.\n")
   (insert "- =C-c (= :: Hide all property drawers.\n")
   (insert "- =C-c )= :: Reveal all property drawers.\n\n"))
 
