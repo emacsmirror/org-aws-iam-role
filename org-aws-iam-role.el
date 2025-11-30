@@ -5,8 +5,8 @@
 ;; Author: William Bosch-Bello <williamsbosch@gmail.com>
 ;; Maintainer: William Bosch-Bello <williamsbosch@gmail.com>
 ;; Created: August 16, 2025
-;; Version: 1.6.1
-;; Package-Version: 1.6.1
+;; Version: 1.6.2
+;; Package-Version: 1.6.2
 ;; Package-Requires: ((emacs "29.1") (async "1.9") (promise "1.1"))
 ;; Keywords: aws, iam, org, babel, tools
 ;; URL: https://github.com/will-abb/org-aws-iam-role
@@ -333,17 +333,12 @@ Returns a cons cell: (LIST-OF-ROLES . NEXT-MARKER)."
 (defun org-aws-iam-role--list-names ()
   "Return a list of all IAM role names, handling pagination."
   (let ((all-roles '())
-        (marker nil)
-        (first-run t))
-    ;; Loop until the AWS API returns no more pages.
-    ;; The `first-run` flag ensures the loop runs at least once when marker starts as nil.
-    (while (or first-run marker)
-      (let* ((page-result (org-aws-iam-role--fetch-roles-page marker))
-             (roles-on-page (car page-result))
-             (next-marker (cdr page-result)))
-        (setq all-roles (nconc all-roles roles-on-page))
-        (setq marker next-marker)
-        (setq first-run nil)))
+        (marker nil))
+    (cl-loop do
+             (let* ((page-result (org-aws-iam-role--fetch-roles-page marker)))
+               (setq all-roles (nconc all-roles (car page-result)))
+               (setq marker (cdr page-result)))
+             while marker)
     (mapcar (lambda (r) (alist-get 'RoleName r)) all-roles)))
 
 (defun org-aws-iam-role--get-full (role-name)
@@ -463,6 +458,7 @@ Each bucket keeps the full alist for each policy item."
     (insert (format ":Updated: %s\n" (or (org-aws-iam-role-policy-update-date policy) "nil")))
     (insert (format ":AttachmentCount: %s\n" (or (org-aws-iam-role-policy-attachment-count policy) "nil")))
     (insert (format ":DefaultVersion: %s\n" (or (org-aws-iam-role-policy-default-version-id policy) "nil")))
+    (insert (format ":Tags: %s\n" (or (org-aws-iam-role--format-tags (org-aws-iam-role-policy-tags policy)) "nil")))
     (insert ":END:\n")
     (insert (format "#+BEGIN_SRC aws-iam :role-name \"%s\" :policy-name \"%s\" :policy-type \"%s\" :arn \"%s\" :results output\n"
                     role-name
@@ -564,7 +560,7 @@ ROLE-NAME is the name of the parent IAM role."
   "Callback to populate BUF with fetched policies for ROLE.
 ALL-POLICIES-VECTOR is the resolved vector of policy structs."
   ;; Catch any error during rendering to prevent the callback from crashing.
-  (condition-case nil
+  (condition-case err
       (with-current-buffer buf
         (let ((boundary-arn (org-aws-iam-role-permissions-boundary-arn role))
               (role-name (org-aws-iam-role-name role)))
@@ -572,7 +568,7 @@ ALL-POLICIES-VECTOR is the resolved vector of policy structs."
           (org-aws-iam-role--insert-policies-section all-policies-vector boundary-arn role-name)
           ;; Insert remaining synchronous sections and finalize the buffer.
           (org-aws-iam-role--insert-remaining-sections-and-finalize role buf)))
-    (error nil)))
+    (error (message "Error populating buffer: %s" (error-message-string err)))))
 
 (defun org-aws-iam-role--populate-role-buffer (role buf)
   "Insert all details for ROLE and its policies into the buffer BUF.
@@ -869,7 +865,7 @@ POLICY-DOCUMENT is the policy JSON string."
 
 (defun org-aws-iam-role--policy-exists-p (policy-arn)
   "Return t if the policy with POLICY-ARN exists in AWS, nil otherwise.
-Uses 'aws iam get-policy' and checks the exit code."
+Uses \"aws iam get-policy\" and checks the exit code."
   (let ((cmd (format "aws iam get-policy --policy-arn %s%s"
                      (shell-quote-argument policy-arn)
                      (org-aws-iam-role--cli-profile-arg))))
@@ -902,8 +898,8 @@ TAGS is the optional string of tags (e.g. \"Key=Owner,Value=Me\")."
 
 (defun org-aws-iam-role--tag-resource (role-name policy-arn policy-type tags)
   "Apply TAGS to an existing resource based on POLICY-TYPE.
-If POLICY-TYPE is 'trust-policy', tags the IAM Role.
-If POLICY-TYPE is 'customer-managed', tags the IAM Policy.
+If POLICY-TYPE is \='trust-policy', tags the IAM Role ROLE-NAME.
+If POLICY-TYPE is \='customer-managed', tags the IAM Policy POLICY-ARN.
 Asks for user confirmation before applying.
 Returns nil if no tagging was performed or user aborted."
   (when (and tags (not (string-empty-p tags)))
@@ -1030,16 +1026,16 @@ Argument POLICY-TYPE is the type of the policy."
     (org-aws-iam-role--babel-confirm-and-run cmd action-desc)))
 
 (defun org-aws-iam-role--babel-handle-create (role-name policy-name policy-type body &optional path tags)
-  "Handle the creation of a 'customer-managed' policy and optional attachment.
+  "Handle the creation of a \='customer-managed' policy and optional attachment.
 If ROLE-NAME is provided, the new policy is attached to it immediately.
 ARGUMENTS: ROLE-NAME, POLICY-NAME, POLICY-TYPE, BODY, PATH, TAGS."
   (if (eq policy-type 'customer-managed)
       (let* ((json-string (json-encode (json-read-from-string body)))
              (create-cmd (org-aws-iam-role--babel-cmd-create-policy policy-name json-string path tags))
              (prompt (if role-name
-                         (format "Create policy '%s' (path: %s, tags: %s) AND attach to role '%s'" 
+                         (format "Create policy '%s' (path: %s, tags: %s) AND attach to role '%s'"
                                  policy-name (or path "/") (or tags "none") role-name)
-                       (format "Create new customer managed policy '%s' (path: %s, tags: %s)" 
+                       (format "Create new customer managed policy '%s' (path: %s, tags: %s)"
                                policy-name (or path "/") (or tags "none")))))
         
         (if (y-or-n-p (format "%s? " prompt))
@@ -1053,7 +1049,7 @@ ARGUMENTS: ROLE-NAME, POLICY-NAME, POLICY-TYPE, BODY, PATH, TAGS."
                   (user-error "AWS CLI Error: %s" output))
 
                 ;; 2. Attempt to parse JSON safely
-                (condition-case err
+                (condition-case _err
                     (let* ((parsed (json-parse-string output :object-type 'alist))
                            (new-policy (alist-get 'Policy parsed))
                            (new-arn (alist-get 'Arn new-policy)))
@@ -1066,7 +1062,7 @@ ARGUMENTS: ROLE-NAME, POLICY-NAME, POLICY-TYPE, BODY, PATH, TAGS."
                             (message "Executing: Attach Policy to Role...")
                             (let ((attach-cmd (org-aws-iam-role--babel-cmd-attach-managed-policy role-name new-arn)))
                               (shell-command-to-string attach-cmd))
-                            (format "Success! Created policy '%s' and attached it to '%s'.\nARN: %s" 
+                            (format "Success! Created policy '%s' and attached it to '%s'.\nARN: %s"
                                     policy-name role-name new-arn))
                         ;; Else: just return success for creation
                         (format "Success! Created policy '%s'.\nARN: %s" policy-name new-arn)))
@@ -1103,7 +1099,7 @@ Argument BODY is the JSON content of the policy."
    ((or (eq policy-type 'customer-managed)
         (eq policy-type 'aws-managed)
         (eq policy-type 'permissions-boundary))
-    (org-aws-iam-role--update-managed-policy-with-retry role-name policy-name policy-arn body))
+    (org-aws-iam-role--update-managed-policy-with-retry policy-name policy-arn body))
 
    (t (user-error "Unsupported policy type for modification: %s" policy-type))))
 
@@ -1138,8 +1134,9 @@ Argument BODY is the JSON content of the policy."
                                      (alist-get 'CreateDate b))))))
         (alist-get 'VersionId (car sorted))))))
 
-(defun org-aws-iam-role--update-managed-policy-with-retry (role-name policy-name policy-arn body)
-  "Update managed policy, handling version limits by offering to delete the oldest version."
+(defun org-aws-iam-role--update-managed-policy-with-retry (policy-name policy-arn body)
+  "Update managed policy POLICY-NAME (POLICY-ARN) with BODY.
+Handles version limits by offering to delete the oldest version."
   (let* ((json-string (json-encode (json-read-from-string body)))
          (cmd (org-aws-iam-role--babel-cmd-for-managed-policy policy-arn json-string))
          (action-desc (format "Update managed policy '%s' (ARN: %s)" (or policy-name "unknown") policy-arn)))
@@ -1152,7 +1149,7 @@ Argument BODY is the JSON content of the policy."
             (if (and (not (string-empty-p result))
                      (string-match-p "LimitExceeded" result))
                 
-                ;; --- LIMIT REACHED LOGIC ---
+                ;; limit reached logic
                 (let ((oldest-ver (org-aws-iam-role--get-oldest-non-default-version policy-arn)))
                   (if (and oldest-ver
                            (y-or-n-p (format "Version limit reached. Delete oldest version (%s) and retry?" oldest-ver)))
@@ -1171,7 +1168,7 @@ Argument BODY is the JSON content of the policy."
                     ;; User said no to deletion, or we couldn't find a version to delete
                     (user-error "Update failed (Limit Exceeded): %s" result)))
               
-              ;; --- NORMAL SUCCESS/FAILURE LOGIC ---
+              ;; normal success/failure logic
               (if (string-match-p "An error occurred" result)
                   (user-error "Update failed: %s" result)
                 (if (string-empty-p result) "Success!" result)))))
@@ -1208,13 +1205,12 @@ PARAMS should include header arguments such as :ROLE-NAME, :POLICY-NAME,
         (let ((account-id (org-aws-iam-role--get-account-id)))
           (unless account-id (error "Could not fetch AWS Account ID to construct ARN"))
           
-          ;; Synthesize ARN: arn:aws:iam::ACCOUNT:policy/PATH/NAME
           (let* ((raw-path (if (and policy-path (not (string-empty-p policy-path))) policy-path "/"))
                  (p-start (if (string-prefix-p "/" raw-path) raw-path (concat "/" raw-path)))
                  (p-full (if (string-suffix-p "/" p-start) p-start (concat p-start "/")))
                  (clean-path (substring p-full 1)))
             
-            (setq policy-arn (format "arn:aws:iam::%s:policy/%s%s" 
+            (setq policy-arn (format "arn:aws:iam::%s:policy/%s%s"
                                      account-id clean-path policy-name)))))
 
       ;; 2. Check existence
@@ -1231,29 +1227,20 @@ PARAMS should include header arguments such as :ROLE-NAME, :POLICY-NAME,
       ;; Only if we are NOT destroying the resource.
       (when (and (not create-p) tags (not delete-p) (not detach-p))
         (org-aws-iam-role--tag-resource role-name policy-arn policy-type tags))
-
       ;; 2. DETACH (Priority 2)
       (when detach-p
         (if (eq policy-type 'inline)
-            ;; Inline policies cannot be detached, so we skip this step gracefully
-            ;; to allow the subsequent DELETE step to handle it.
             (message "Skipping detach for inline policy (implicit in delete).")
           (push (org-aws-iam-role--babel-handle-detach role-name policy-name policy-arn policy-type) results)))
-
       ;; 3. DELETE (Priority 3)
       (when delete-p
         (push (org-aws-iam-role--babel-handle-delete role-name policy-name policy-arn policy-type) results))
-
       ;; 4. CREATE / UPDATE (Priority 4)
-      ;; Only run if we did NOT perform a destructive action (Detach or Delete).
       (unless (or detach-p delete-p)
         (if create-p
             (push (org-aws-iam-role--babel-handle-create role-name policy-name policy-type body policy-path tags) results)
           (push (org-aws-iam-role--babel-handle-update role-name policy-name policy-arn policy-type body) results)))
-
-      ;; Return concatenated results
       (mapconcat #'identity (nreverse results) "\n"))))
-
 
 ;;;;; unified json start ;;;;;
 
@@ -1274,26 +1261,9 @@ Removes all non-alphanumeric characters."
   "Parse a DATE-STRING into an Emacs time list.
 Return nil if the string is nil, \"nil\", or invalid."
   (when (and date-string (not (string-empty-p date-string)) (not (string= "nil" date-string)))
-    (message "-> Parsing date string: %s" date-string)
-    (let ((parsed-time (condition-case err
-                           (parse-time-string date-string)
-                         (error (message "-> PARSE FAILED: %s" (error-message-string err))
-                                nil))))
-      (if parsed-time
-          (message "-> Parse OK (DECODED): %s" parsed-time)
-        (message "-> Parse FAILED or string was invalid."))
-      parsed-time)))
-
-(defun org-aws-iam-role--time-greater-p (time-a time-b)
-  "Return t if TIME-A is later than TIME-B.
-Both are time values like (HIGH LOW . USEC)."
-  (let ((high-a (car time-a))
-        (low-a (cadr time-a))
-        (high-b (car time-b))
-        (low-b (cadr time-b)))
-    (or (> high-a high-b)
-        (and (= high-a high-b)
-             (> low-a low-b)))))
+    (condition-case nil
+        (parse-time-string date-string)
+      (error nil))))
 
 (defun org-aws-iam-role--extract-all-permission-statements ()
   "Parse the current buffer to find and extract all permission policy statements.
@@ -1380,8 +1350,6 @@ one of its policies."
   (interactive)
   (unless (derived-mode-p 'org-mode)
     (user-error "This command must be run from an Org mode buffer"))
-
-  (message "--- DEBUG: Finding last modified date (please check *Messages* buffer) ---")
   (let* ((tree (org-element-parse-buffer))
          (all-dates (org-aws-iam-role--collect-dates-from-buffer tree)))
     (org-aws-iam-role--find-latest-date all-dates)))
@@ -1389,7 +1357,6 @@ one of its policies."
 (defun org-aws-iam-role--collect-dates-from-buffer (tree)
   "Collect all :Created: and :Updated: dates from the parse TREE."
   (let ((all-dates '()))
-    (message "Step 1: Scanning buffer for all :Created: and :Updated: properties...")
     (org-element-map tree 'property-drawer
       (lambda (drawer)
         (org-element-map (org-element-contents drawer) 'node-property
@@ -1397,50 +1364,28 @@ one of its policies."
             (let ((key (org-element-property :key prop))
                   (value (org-element-property :value prop)))
               (when (and value (or (string= key "Created") (string= key "Updated")))
-                (message "Found property: Key=%s, Value=%s" key value)
                 (let ((parsed-date (org-aws-iam-role--parse-modified-date value)))
                   (when parsed-date
-                    (message "==> Adding valid DECODED list: %s" parsed-date)
                     (push parsed-date all-dates)))))))))
-    (message "Step 1 complete.")
     all-dates))
 
 (defun org-aws-iam-role--find-latest-date (all-dates)
   "Find the latest date in ALL-DATES and return it as a formatted string."
-  (message "--------------------------------------------------")
-  (message "Step 2: Finding the latest date from the collected list...")
   (if (null all-dates)
-      (message "DEBUG: No valid :Created: or :Updated: dates were found.")
+      (message "No modified dates found in this buffer.")
     (let* ((latest-time-DECODED (car all-dates))
            (time-val-current nil)
            (time-val-latest nil)
            (is-greater nil)
            (final-time-VALUE nil))
-      (message "Found %d valid dates." (length all-dates))
-      (message "Initial latest-time (DECODED) set to: %s" latest-time-DECODED)
-      (message "Starting loop to compare all dates...")
       (dolist (current-date-DECODED (cdr all-dates))
-        (message "Loop: Comparing (DECODED) latest (%s) with new (%s)" latest-time-DECODED current-date-DECODED)
-        (message "Loop: Converting both to time values for comparison...")
         (setq time-val-current (apply #'encode-time current-date-DECODED))
         (setq time-val-latest (apply #'encode-time latest-time-DECODED))
-        (message "Loop: time-val (new) = %s" time-val-current)
-        (message "Loop: time-val (latest) = %s" time-val-latest)
-        (setq is-greater (org-aws-iam-role--time-greater-p time-val-current time-val-latest))
-        (message "Loop: Is new date greater? %s" is-greater)
+        (setq is-greater (time-less-p time-val-latest time-val-current))
         (when is-greater
-          (setq latest-time-DECODED current-date-DECODED)
-          (message "==> NEW LATEST TIME (DECODED) set to: %s" latest-time-DECODED)))
-      (message "Loop complete.")
-      (message "--------------------------------------------------")
-      (message "Step 3: Formatting final result...")
-      (message "Final latest-time (DECODED) before format: %s" latest-time-DECODED)
-      (message "Converting final decoded list to a time value for formatting...")
+          (setq latest-time-DECODED current-date-DECODED)))
       (setq final-time-VALUE (apply #'encode-time latest-time-DECODED))
-      (message "Final time-VALUE is: %s" final-time-VALUE)
       (let ((latest-date-string (format-time-string "%FT%T%z" final-time-VALUE)))
-        (message "Final formatted date string: %s" latest-date-string)
-        (message "--- DEBUG END ---")
         (message "Last modification date found: %s" latest-date-string)))))
 
 ;;;;; Last Accessed Details ;;;;;
