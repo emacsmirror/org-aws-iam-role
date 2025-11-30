@@ -333,17 +333,12 @@ Returns a cons cell: (LIST-OF-ROLES . NEXT-MARKER)."
 (defun org-aws-iam-role--list-names ()
   "Return a list of all IAM role names, handling pagination."
   (let ((all-roles '())
-        (marker nil)
-        (first-run t))
-    ;; Loop until the AWS API returns no more pages.
-    ;; The `first-run` flag ensures the loop runs at least once when marker starts as nil.
-    (while (or first-run marker)
-      (let* ((page-result (org-aws-iam-role--fetch-roles-page marker))
-             (roles-on-page (car page-result))
-             (next-marker (cdr page-result)))
-        (setq all-roles (nconc all-roles roles-on-page))
-        (setq marker next-marker)
-        (setq first-run nil)))
+        (marker nil))
+    (cl-loop do
+             (let* ((page-result (org-aws-iam-role--fetch-roles-page marker)))
+               (setq all-roles (nconc all-roles (car page-result)))
+               (setq marker (cdr page-result)))
+             while marker)
     (mapcar (lambda (r) (alist-get 'RoleName r)) all-roles)))
 
 (defun org-aws-iam-role--get-full (role-name)
