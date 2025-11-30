@@ -8,7 +8,7 @@ This package uses Org Babel and the AWS CLI under the hood, allowing you to edit
 
 ## Demonstration
 
-[![Org AWS IAM Role for Emacs Demo](https://img.youtube.com/vi/9HffiDAg10U/hqdefault.jpg)](https://youtu.be/9HffiDAg10U)
+[![Org AWS IAM Role for Emacs Demo](https://img.youtube.com/vi/HaYiXQqAoJw/hqdefault.jpg)](https://youtu.be/HaYiXQqAoJw)
 
 -----
 
