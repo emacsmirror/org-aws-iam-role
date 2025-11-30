@@ -1148,7 +1148,7 @@ Handles version limits by offering to delete the oldest version."
             (if (and (not (string-empty-p result))
                      (string-match-p "LimitExceeded" result))
                 
-                ;; --- LIMIT REACHED LOGIC ---
+                ;; limit reached logic
                 (let ((oldest-ver (org-aws-iam-role--get-oldest-non-default-version policy-arn)))
                   (if (and oldest-ver
                            (y-or-n-p (format "Version limit reached. Delete oldest version (%s) and retry?" oldest-ver)))
@@ -1167,7 +1167,7 @@ Handles version limits by offering to delete the oldest version."
                     ;; User said no to deletion, or we couldn't find a version to delete
                     (user-error "Update failed (Limit Exceeded): %s" result)))
               
-              ;; --- NORMAL SUCCESS/FAILURE LOGIC ---
+              ;; normal success/failure logic
               (if (string-match-p "An error occurred" result)
                   (user-error "Update failed: %s" result)
                 (if (string-empty-p result) "Success!" result)))))
@@ -1204,7 +1204,6 @@ PARAMS should include header arguments such as :ROLE-NAME, :POLICY-NAME,
         (let ((account-id (org-aws-iam-role--get-account-id)))
           (unless account-id (error "Could not fetch AWS Account ID to construct ARN"))
           
-          ;; Synthesize ARN: arn:aws:iam::ACCOUNT:policy/PATH/NAME
           (let* ((raw-path (if (and policy-path (not (string-empty-p policy-path))) policy-path "/"))
                  (p-start (if (string-prefix-p "/" raw-path) raw-path (concat "/" raw-path)))
                  (p-full (if (string-suffix-p "/" p-start) p-start (concat p-start "/")))
@@ -1227,29 +1226,20 @@ PARAMS should include header arguments such as :ROLE-NAME, :POLICY-NAME,
       ;; Only if we are NOT destroying the resource.
       (when (and (not create-p) tags (not delete-p) (not detach-p))
         (org-aws-iam-role--tag-resource role-name policy-arn policy-type tags))
-
       ;; 2. DETACH (Priority 2)
       (when detach-p
         (if (eq policy-type 'inline)
-            ;; Inline policies cannot be detached, so we skip this step gracefully
-            ;; to allow the subsequent DELETE step to handle it.
             (message "Skipping detach for inline policy (implicit in delete).")
           (push (org-aws-iam-role--babel-handle-detach role-name policy-name policy-arn policy-type) results)))
-
       ;; 3. DELETE (Priority 3)
       (when delete-p
         (push (org-aws-iam-role--babel-handle-delete role-name policy-name policy-arn policy-type) results))
-
       ;; 4. CREATE / UPDATE (Priority 4)
-      ;; Only run if we did NOT perform a destructive action (Detach or Delete).
       (unless (or detach-p delete-p)
         (if create-p
             (push (org-aws-iam-role--babel-handle-create role-name policy-name policy-type body policy-path tags) results)
           (push (org-aws-iam-role--babel-handle-update role-name policy-name policy-arn policy-type body) results)))
-
-      ;; Return concatenated results
       (mapconcat #'identity (nreverse results) "\n"))))
-
 
 ;;;;; unified json start ;;;;;
 
