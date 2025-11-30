@@ -991,21 +991,83 @@ Argument POLICY-NAME is the name of the policy.
 Argument POLICY-ARN is the ARN of the policy.
 Argument POLICY-TYPE is the type of the policy.
 Argument BODY is the JSON content of the policy."
+  (cond
+   ;; 1. Trust Policies (Use standard confirm-and-run)
+   ((eq policy-type 'trust-policy)
+    (let* ((json-string (json-encode (json-read-from-string body)))
+           (action-desc (format "Update Trust Policy for role '%s'" role-name))
+           (cmd (org-aws-iam-role--babel-cmd-for-trust-policy role-name json-string)))
+      (org-aws-iam-role--babel-confirm-and-run cmd action-desc)))
+
+   ;; 2. Inline Policies (Use standard confirm-and-run)
+   ((eq policy-type 'inline)
+    (let* ((json-string (json-encode (json-read-from-string body)))
+           (action-desc (format "Update inline policy '%s' for role '%s'" policy-name role-name))
+           (cmd (org-aws-iam-role--babel-cmd-for-inline-policy role-name policy-name json-string)))
+      (org-aws-iam-role--babel-confirm-and-run cmd action-desc)))
+
+   ;; 3. Managed Policies (Use new retry logic)
+   ((or (eq policy-type 'customer-managed)
+        (eq policy-type 'aws-managed)
+        (eq policy-type 'permissions-boundary))
+    (org-aws-iam-role--update-managed-policy-with-retry role-name policy-name policy-arn body))
+
+   (t (user-error "Unsupported policy type for modification: %s" policy-type))))
+
+(defun org-aws-iam-role--get-oldest-non-default-version (policy-arn)
+  "Return the VersionId of the oldest non-default version for POLICY-ARN."
+  (let* ((cmd (format "aws iam list-policy-versions --policy-arn %s --output json%s"
+                      (shell-quote-argument policy-arn)
+                      (org-aws-iam-role--cli-profile-arg)))
+         (json (shell-command-to-string cmd))
+         (parsed (json-parse-string json :object-type 'alist :array-type 'list))
+         (versions (alist-get 'Versions parsed))
+         (non-defaults (cl-remove-if (lambda (v) (eq t (alist-get 'IsDefaultVersion v))) versions)))
+    (when non-defaults
+      (let ((sorted (sort non-defaults
+                          (lambda (a b)
+                            (string< (alist-get 'CreateDate a)
+                                     (alist-get 'CreateDate b))))))
+        (alist-get 'VersionId (car sorted))))))
+
+(defun org-aws-iam-role--update-managed-policy-with-retry (role-name policy-name policy-arn body)
+  "Update managed policy, handling version limits by offering to delete the oldest version."
   (let* ((json-string (json-encode (json-read-from-string body)))
-         (action-desc (format "Update %s for role '%s'"
-                              (if (eq policy-type 'trust-policy) "Trust Policy" (format "policy '%s'" policy-name))
-                              role-name))
-         (cmd (cond
-               ((eq policy-type 'trust-policy)
-                (org-aws-iam-role--babel-cmd-for-trust-policy role-name json-string))
-               ((eq policy-type 'inline)
-                (org-aws-iam-role--babel-cmd-for-inline-policy role-name policy-name json-string))
-               ((or (eq policy-type 'customer-managed)
-                    (eq policy-type 'aws-managed)
-                    (eq policy-type 'permissions-boundary))
-                (org-aws-iam-role--babel-cmd-for-managed-policy policy-arn json-string))
-               (t (user-error "Unsupported policy type for modification: %s" policy-type)))))
-    (org-aws-iam-role--babel-confirm-and-run cmd action-desc)))
+         (cmd (org-aws-iam-role--babel-cmd-for-managed-policy policy-arn json-string))
+         (action-desc (format "Update managed policy '%s' (ARN: %s)" (or policy-name "unknown") policy-arn)))
+    
+    (if (y-or-n-p (format "%s? " action-desc))
+        (progn
+          (message "Executing: Update Policy...")
+          (let ((result (string-trim (shell-command-to-string cmd))))
+            ;; Check for LimitExceededException in the output
+            (if (and (not (string-empty-p result))
+                     (string-match-p "LimitExceeded" result))
+                
+                ;; --- LIMIT REACHED LOGIC ---
+                (let ((oldest-ver (org-aws-iam-role--get-oldest-non-default-version policy-arn)))
+                  (if (and oldest-ver
+                           (y-or-n-p (format "Version limit reached. Delete oldest version (%s) and retry?" oldest-ver)))
+                      (progn
+                        (message "Deleting version %s..." oldest-ver)
+                        (let ((del-cmd (format "aws iam delete-policy-version --policy-arn %s --version-id %s%s"
+                                               (shell-quote-argument policy-arn)
+                                               oldest-ver
+                                               (org-aws-iam-role--cli-profile-arg))))
+                          (shell-command-to-string del-cmd))
+                        (message "Retrying update...")
+                        ;; Retry the original update command
+                        (let ((retry-result (string-trim (shell-command-to-string cmd))))
+                          (if (string-empty-p retry-result) "Success!" retry-result)))
+                    
+                    ;; User said no to deletion, or we couldn't find a version to delete
+                    (user-error "Update failed (Limit Exceeded): %s" result)))
+              
+              ;; --- NORMAL SUCCESS/FAILURE LOGIC ---
+              (if (string-match-p "An error occurred" result)
+                  (user-error "Update failed: %s" result)
+                (if (string-empty-p result) "Success!" result)))))
+      (user-error "Aborted by user"))))
 
 (defun org-babel-execute:aws-iam (body params)
   "Execute an `aws-iam' source block.
