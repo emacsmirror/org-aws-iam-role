@@ -5,8 +5,8 @@
 ;; Author: William Bosch-Bello <williamsbosch@gmail.com>
 ;; Maintainer: William Bosch-Bello <williamsbosch@gmail.com>
 ;; Created: August 16, 2025
-;; Version: 1.6.3
-;; Package-Version: 1.6.3
+;; Version: 1.6.4
+;; Package-Version: 1.6.4
 ;; Package-Requires: ((emacs "29.1") (async "1.9") (promise "1.1"))
 ;; Keywords: aws, iam, org, babel, tools
 ;; URL: https://github.com/will-abb/org-aws-iam-role
@@ -1063,7 +1063,7 @@ ARGUMENTS: ROLE-NAME, POLICY-NAME, POLICY-TYPE, BODY, PATH, TAGS."
                             (let* ((attach-cmd (org-aws-iam-role--babel-cmd-attach-managed-policy role-name new-arn))
                                    (attach-output (string-trim (shell-command-to-string attach-cmd))))
                               (if (not (string-empty-p attach-output))
-                                  (user-error "Created policy '%s' (ARN: %s), BUT attachment failed: %s" 
+                                  (user-error "Created policy '%s' (ARN: %s), BUT attachment failed: %s"
                                               policy-name new-arn attach-output)
                                 (format "Success! Created policy '%s' and attached it to '%s'.\nARN: %s"
                                         policy-name role-name new-arn))))
