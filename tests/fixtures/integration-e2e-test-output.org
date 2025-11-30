@@ -26,15 +26,15 @@ Use header arguments for specific actions:
 * IAM Role: test-iam-packageIamRole
 :PROPERTIES:
 :ARN: arn:aws:iam::005343251202:role/test-iam-packageIamRole
-:RoleID: AROAQCPT3RMBCBVAKQAPT
+:RoleID: AROAQCPT3RMBE6GFX4XOW
 :Path: /
-:Created: 2025-07-26T04:27:20+00:00
+:Created: 2025-11-30T20:46:20+00:00
 :MaxSessionDuration: 3600
-:Description: 
+:Description: nil
 :PermissionsBoundaryArn: arn:aws:iam::005343251202:policy/DevOpsPermBoundary
-:LastUsedDate: 2025-10-26T18:46:28+00:00
-:LastUsedRegion: us-east-1
-:Tags: {"environment":"personal","managed":"terraform","repo":"aws-iam-mode/terraform/main.tf","user_id_of_creator":"williseedAdminIDC","assumed_role_of_creator":"AWSReservedSSO_personal-full-admin_a401bb7d90ea7c07"}
+:LastUsedDate: nil
+:LastUsedRegion: nil
+:Tags: {"repo":"aws-iam-mode/terraform/main.tf","user_id_of_creator":"williseedAdminIDC","assumed_role_of_creator":"AWSReservedSSO_personal-full-admin_a401bb7d90ea7c07","environment":"personal","managed":"terraform"}
 :END:
 ** Permission Policies
 *** AmazonSSMManagedInstanceCore
@@ -302,41 +302,15 @@ Use header arguments for specific actions:
   ]
 }
 #+END_SRC
-*** test-iam-package-example-policy-name
-:PROPERTIES:
-:AWSPolicyType: Customer Managed
-:ID: ANPAQCPT3RMBDCTW4WADR
-:ARN: arn:aws:iam::005343251202:policy/test-iam-package-example-policy-name
-:Path: /
-:Description: Policy to test added access to roles
-:Created: 2025-07-26T04:27:20+00:00
-:Updated: 2025-07-26T04:27:20+00:00
-:AttachmentCount: 1
-:DefaultVersion: v1
-:Tags: {"environment":"personal","managed":"terraform","repo":"aws-iam-mode/terraform/main.tf"}
-:END:
-#+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-example-policy-name" :policy-type "customer-managed" :arn "arn:aws:iam::005343251202:policy/test-iam-package-example-policy-name" :results output
-{
-  "Statement": [
-    {
-      "Action": "s3:List*",
-      "Effect": "Allow",
-      "Resource": "*",
-      "Sid": "AdditionalAccess"
-    }
-  ],
-  "Version": "2012-10-17"
-}
-#+END_SRC
 *** test-iam-package-extra-policy-3
 :PROPERTIES:
 :AWSPolicyType: Customer Managed
-:ID: ANPAQCPT3RMBNVN3G5U6X
+:ID: ANPAQCPT3RMBPPLBKCTX5
 :ARN: arn:aws:iam::005343251202:policy/test-iam-package-extra-policy-3
 :Path: /
 :Description: Extra policy 3
-:Created: 2025-11-30T16:43:37+00:00
-:Updated: 2025-11-30T16:43:37+00:00
+:Created: 2025-11-30T20:46:20+00:00
+:Updated: 2025-11-30T20:46:20+00:00
 :AttachmentCount: 1
 :DefaultVersion: v1
 :Tags: {"environment":"personal","managed":"terraform","repo":"aws-iam-mode/terraform/main.tf"}
@@ -356,12 +330,12 @@ Use header arguments for specific actions:
 *** test-iam-package-extra-policy-1
 :PROPERTIES:
 :AWSPolicyType: Customer Managed
-:ID: ANPAQCPT3RMBN7CCAQS36
+:ID: ANPAQCPT3RMBBMSZ4KB7T
 :ARN: arn:aws:iam::005343251202:policy/test-iam-package-extra-policy-1
 :Path: /
 :Description: Extra policy 1
-:Created: 2025-07-26T04:27:20+00:00
-:Updated: 2025-07-26T04:27:20+00:00
+:Created: 2025-11-30T20:46:20+00:00
+:Updated: 2025-11-30T20:46:20+00:00
 :AttachmentCount: 1
 :DefaultVersion: v1
 :Tags: {"environment":"personal","managed":"terraform","repo":"aws-iam-mode/terraform/main.tf"}
@@ -378,17 +352,43 @@ Use header arguments for specific actions:
   "Version": "2012-10-17"
 }
 #+END_SRC
+*** test-iam-package-example-policy-name
+:PROPERTIES:
+:AWSPolicyType: Customer Managed
+:ID: ANPAQCPT3RMBO3HOWDIYX
+:ARN: arn:aws:iam::005343251202:policy/test-iam-package-example-policy-name
+:Path: /
+:Description: Policy to test added access to roles
+:Created: 2025-11-30T20:46:20+00:00
+:Updated: 2025-11-30T20:46:20+00:00
+:AttachmentCount: 1
+:DefaultVersion: v1
+:Tags: {"environment":"personal","managed":"terraform","repo":"aws-iam-mode/terraform/main.tf"}
+:END:
+#+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-example-policy-name" :policy-type "customer-managed" :arn "arn:aws:iam::005343251202:policy/test-iam-package-example-policy-name" :results output
+{
+  "Statement": [
+    {
+      "Action": "s3:List*",
+      "Effect": "Allow",
+      "Resource": "*",
+      "Sid": "AdditionalAccess"
+    }
+  ],
+  "Version": "2012-10-17"
+}
+#+END_SRC
 *** test-iam-package-extra-policy-2
 :PROPERTIES:
 :AWSPolicyType: Customer Managed
-:ID: ANPAQCPT3RMBEUW4JQ66O
+:ID: ANPAQCPT3RMBDIWO3ZQDT
 :ARN: arn:aws:iam::005343251202:policy/test-iam-package-extra-policy-2
 :Path: /
 :Description: Extra policy 2
-:Created: 2025-07-26T04:27:20+00:00
-:Updated: 2025-09-24T20:40:31+00:00
+:Created: 2025-11-30T20:46:20+00:00
+:Updated: 2025-11-30T20:46:20+00:00
 :AttachmentCount: 1
-:DefaultVersion: v3
+:DefaultVersion: v1
 :Tags: {"environment":"personal","managed":"terraform","repo":"aws-iam-mode/terraform/main.tf"}
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-extra-policy-2" :policy-type "customer-managed" :arn "arn:aws:iam::005343251202:policy/test-iam-package-extra-policy-2" :results output
