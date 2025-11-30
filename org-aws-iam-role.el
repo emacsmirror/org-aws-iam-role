@@ -880,14 +880,60 @@ ROLE-NAME is the IAM role name. POLICY-ARN is the ARN of the managed policy."
           (shell-quote-argument policy-arn)
           (org-aws-iam-role--cli-profile-arg)))
 
-(defun org-aws-iam-role--babel-cmd-create-policy (policy-name policy-document)
+(defun org-aws-iam-role--babel-cmd-create-policy (policy-name policy-document &optional path tags)
   "Return the AWS CLI command to create a customer-managed policy.
 POLICY-NAME is the name of the new policy.
-POLICY-DOCUMENT is the policy JSON string."
-  (format "aws iam create-policy --policy-name %s --policy-document %s%s"
+POLICY-DOCUMENT is the policy JSON string.
+PATH is the optional IAM path (e.g., \"/service-role/\").
+TAGS is the optional string of tags (e.g. \"Key=Owner,Value=Me\")."
+  (format "aws iam create-policy --policy-name %s --policy-document %s%s%s%s"
           (shell-quote-argument policy-name)
           (shell-quote-argument policy-document)
+          (if (and path (not (string-empty-p path)))
+              (format " --path %s" (shell-quote-argument path))
+            "")
+          (if (and tags (not (string-empty-p tags)))
+              (format " --tags %s" tags) ;; We assume user provides format "Key=K,Value=V ..."
+            "")
           (org-aws-iam-role--cli-profile-arg)))
+
+(defun org-aws-iam-role--tag-resource (role-name policy-arn policy-type tags)
+  "Apply TAGS to an existing resource based on POLICY-TYPE.
+If POLICY-TYPE is 'trust-policy', tags the IAM Role.
+If POLICY-TYPE is 'customer-managed', tags the IAM Policy.
+Asks for user confirmation before applying.
+Returns nil if no tagging was performed or user aborted."
+  (when (and tags (not (string-empty-p tags)))
+    (cond
+     ;; Case 1: Tag the Role (Context is Trust Policy)
+     ((eq policy-type 'trust-policy)
+      (let ((cmd (format "aws iam tag-role --role-name %s --tags %s%s"
+                         (shell-quote-argument role-name)
+                         tags
+                         (org-aws-iam-role--cli-profile-arg)))
+            (prompt (format "Apply tags '%s' to Role '%s'" tags role-name)))
+        (if (y-or-n-p (format "%s? " prompt))
+            (progn
+              (message "Executing: Tag Role...")
+              (shell-command-to-string cmd))
+          (message "Tagging aborted by user."))))
+
+     ;; Case 2: Tag the Managed Policy
+     ((eq policy-type 'customer-managed)
+      (let ((cmd (format "aws iam tag-policy --policy-arn %s --tags %s%s"
+                         (shell-quote-argument policy-arn)
+                         tags
+                         (org-aws-iam-role--cli-profile-arg)))
+            (prompt (format "Apply tags '%s' to Policy '%s'" tags policy-arn)))
+        (if (y-or-n-p (format "%s? " prompt))
+            (progn
+              (message "Executing: Tag Policy...")
+              (shell-command-to-string cmd))
+          (message "Tagging aborted by user."))))
+     
+     ;; Case 3: Inline
+     ((eq policy-type 'inline)
+      (message "Warning: Inline policies cannot be tagged directly. Tag the Role (Trust Policy) instead.")))))
 
 (defun org-aws-iam-role--babel-cmd-delete-inline-policy (role-name policy-name)
   "Return the AWS CLI command to delete an inline policy.
@@ -952,35 +998,51 @@ Argument POLICY-TYPE is the type of the policy."
         (cmd (org-aws-iam-role--babel-cmd-detach-managed-policy role-name policy-arn)))
     (org-aws-iam-role--babel-confirm-and-run cmd action-desc)))
 
-(defun org-aws-iam-role--babel-handle-create (role-name policy-name policy-type body)
+(defun org-aws-iam-role--babel-handle-create (role-name policy-name policy-type body &optional path tags)
   "Handle the creation of a 'customer-managed' policy and optional attachment.
 If ROLE-NAME is provided, the new policy is attached to it immediately.
-ARGUMENTS: ROLE-NAME, POLICY-NAME, POLICY-TYPE, BODY."
+ARGUMENTS: ROLE-NAME, POLICY-NAME, POLICY-TYPE, BODY, PATH, TAGS."
   (if (eq policy-type 'customer-managed)
       (let* ((json-string (json-encode (json-read-from-string body)))
-             (create-cmd (org-aws-iam-role--babel-cmd-create-policy policy-name json-string))
+             (create-cmd (org-aws-iam-role--babel-cmd-create-policy policy-name json-string path tags))
              (prompt (if role-name
-                         (format "Create policy '%s' AND attach to role '%s'" policy-name role-name)
-                       (format "Create new customer managed policy '%s'" policy-name))))
+                         (format "Create policy '%s' (path: %s, tags: %s) AND attach to role '%s'" 
+                                 policy-name (or path "/") (or tags "none") role-name)
+                       (format "Create new customer managed policy '%s' (path: %s, tags: %s)" 
+                               policy-name (or path "/") (or tags "none")))))
+        
         (if (y-or-n-p (format "%s? " prompt))
             (progn
               (message "Executing: Create Policy...")
-              (let* ((output (shell-command-to-string create-cmd))
-                     (parsed (json-parse-string output :object-type 'alist))
-                     (new-policy (alist-get 'Policy parsed))
-                     (new-arn (alist-get 'Arn new-policy)))
+              ;; Capture the output and trim whitespace
+              (let ((output (string-trim (shell-command-to-string create-cmd))))
                 
-                (unless new-arn
-                  (error "Failed to retrieve ARN from create-policy output: %s" output))
+                ;; 1. Check for known CLI text errors (AWS errors often start with "An error...")
+                (when (string-prefix-p "An error" output)
+                  (user-error "AWS CLI Error: %s" output))
 
-                (if role-name
-                    (progn
-                      (message "Executing: Attach Policy to Role...")
-                      (let ((attach-cmd (org-aws-iam-role--babel-cmd-attach-managed-policy role-name new-arn)))
-                        (shell-command-to-string attach-cmd))
-                      (format "Success! Created policy '%s' and attached it to '%s'.\nARN: %s" 
-                              policy-name role-name new-arn))
-                  (format "Success! Created policy '%s'.\nARN: %s" policy-name new-arn))))
+                ;; 2. Attempt to parse JSON safely
+                (condition-case err
+                    (let* ((parsed (json-parse-string output :object-type 'alist))
+                           (new-policy (alist-get 'Policy parsed))
+                           (new-arn (alist-get 'Arn new-policy)))
+                      
+                      (unless new-arn
+                        (error "JSON parsed, but no ARN found. Full Output: %s" output))
+
+                      (if role-name
+                          (progn
+                            (message "Executing: Attach Policy to Role...")
+                            (let ((attach-cmd (org-aws-iam-role--babel-cmd-attach-managed-policy role-name new-arn)))
+                              (shell-command-to-string attach-cmd))
+                            (format "Success! Created policy '%s' and attached it to '%s'.\nARN: %s" 
+                                    policy-name role-name new-arn))
+                        ;; Else: just return success for creation
+                        (format "Success! Created policy '%s'.\nARN: %s" policy-name new-arn)))
+                  
+                  ;; 3. Catch JSON parsing errors (e.g. other non-JSON text returned)
+                  (json-parse-error
+                   (user-error "Failed to parse AWS response. The command likely failed. Output: %s" output)))))
           (user-error "Aborted by user")))
     (user-error "The create action is only for 'customer-managed' policies")))
 
@@ -1069,17 +1131,20 @@ Argument BODY is the JSON content of the policy."
                 (if (string-empty-p result) "Success!" result)))))
       (user-error "Aborted by user"))))
 
+;; EXISTING FUNCTION (MODIFIED)
 (defun org-babel-execute:aws-iam (body params)
   "Execute an `aws-iam' source block.
 BODY with header PARAMS to manage IAM policies.
 PARAMS should include header arguments such as :ROLE-NAME, :POLICY-NAME,
-:ARN, and :POLICY-TYPE."
+:ARN, :POLICY-TYPE, :PATH, and :TAGS."
   (when buffer-read-only
     (user-error "Buffer is read-only. Press C-c C-e to enable edits and execution"))
 
   (let* ((role-name (cdr (assoc :role-name params)))
          (policy-name (cdr (assoc :policy-name params)))
          (policy-arn (cdr (assoc :arn params)))
+         (policy-path (cdr (assoc :path params)))
+         (tags (cdr (assoc :tags params)))
          (policy-type-str (cdr (assoc :policy-type params)))
          (policy-type (when policy-type-str (intern policy-type-str)))
          (delete-p (org-aws-iam-role--param-true-p (cdr (assoc :delete params))))
@@ -1095,8 +1160,19 @@ PARAMS should include header arguments such as :ROLE-NAME, :POLICY-NAME,
       (unless (and policy-arn (not (string-empty-p policy-arn)))
         (let ((account-id (org-aws-iam-role--get-account-id)))
           (unless account-id (error "Could not fetch AWS Account ID to construct ARN"))
-          ;; We assume default path "/" if we are synthesizing the ARN
-          (setq policy-arn (format "arn:aws:iam::%s:policy/%s" account-id policy-name))))
+          
+          ;; Synthesize ARN: arn:aws:iam::ACCOUNT:policy/PATH/NAME
+          ;; Fix: Normalize path to ensure it starts/ends with "/" and remove leading slash for ARN construction.
+          (let* ((raw-path (if (and policy-path (not (string-empty-p policy-path))) policy-path "/"))
+                 ;; Ensure starts with /
+                 (p-start (if (string-prefix-p "/" raw-path) raw-path (concat "/" raw-path)))
+                 ;; Ensure ends with /
+                 (p-full (if (string-suffix-p "/" p-start) p-start (concat p-start "/")))
+                 ;; Remove leading / for the ARN format (e.g. "/dev/" -> "dev/")
+                 (clean-path (substring p-full 1)))
+            
+            (setq policy-arn (format "arn:aws:iam::%s:policy/%s%s" 
+                                     account-id clean-path policy-name)))))
 
       ;; 2. Check if this ARN actually exists in AWS
       (if (org-aws-iam-role--policy-exists-p policy-arn)
@@ -1106,10 +1182,17 @@ PARAMS should include header arguments such as :ROLE-NAME, :POLICY-NAME,
     (unless (and (or role-name create-p) policy-type)
       (user-error "Missing required header arguments: :ROLE-NAME or :POLICY-TYPE"))
 
+    ;; --- TAGGING OPERATION (Priority 1) ---
+    ;; If the resource exists (not creating) and tags are present, apply them immediately.
+    (when (and (not create-p) tags (not delete-p))
+      (org-aws-iam-role--tag-resource role-name policy-arn policy-type tags))
+
+    ;; --- MAIN OPERATION (Priority 2) ---
     (cond
      (delete-p (org-aws-iam-role--babel-handle-delete role-name policy-name policy-arn policy-type))
      (detach-p (org-aws-iam-role--babel-handle-detach role-name policy-name policy-arn policy-type))
-     (create-p (org-aws-iam-role--babel-handle-create role-name policy-name policy-type body))
+     ;; If create-p is true, we pass tags to the create handler
+     (create-p (org-aws-iam-role--babel-handle-create role-name policy-name policy-type body policy-path tags))
      (t (org-aws-iam-role--babel-handle-update role-name policy-name policy-arn policy-type body)))))
 
 
