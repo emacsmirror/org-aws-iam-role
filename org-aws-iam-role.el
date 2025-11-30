@@ -124,6 +124,14 @@ If ROLE-NAME is provided programmatically, skip prompting."
           (completing-read "Select AWS profile: " profiles nil t))
     (message "Set IAM Role AWS profile to: %s" org-aws-iam-role-profile)))
 
+(defun org-aws-iam-role--get-account-id ()
+  "Fetch the current AWS Account ID using sts get-caller-identity."
+  (let* ((cmd (format "aws sts get-caller-identity --output json%s"
+                      (org-aws-iam-role--cli-profile-arg)))
+         (json (shell-command-to-string cmd))
+         (parsed (json-parse-string json :object-type 'alist)))
+    (alist-get 'Account parsed)))
+
 (defun org-aws-iam-role-toggle-read-only ()
   "Toggle read-only mode in the current buffer and provide feedback."
   (interactive)
@@ -856,6 +864,22 @@ POLICY-DOCUMENT is the policy JSON string."
       (or (equal val-str "t")
           (equal val-str "true")))))
 
+(defun org-aws-iam-role--policy-exists-p (policy-arn)
+  "Return t if the policy with POLICY-ARN exists in AWS, nil otherwise.
+Uses 'aws iam get-policy' and checks the exit code."
+  (let ((cmd (format "aws iam get-policy --policy-arn %s%s"
+                     (shell-quote-argument policy-arn)
+                     (org-aws-iam-role--cli-profile-arg))))
+    (eq 0 (call-process-shell-command cmd nil nil nil))))
+
+(defun org-aws-iam-role--babel-cmd-attach-managed-policy (role-name policy-arn)
+  "Return the AWS CLI command to attach a managed policy.
+ROLE-NAME is the IAM role name. POLICY-ARN is the ARN of the managed policy."
+  (format "aws iam attach-role-policy --role-name %s --policy-arn %s%s"
+          (shell-quote-argument role-name)
+          (shell-quote-argument policy-arn)
+          (org-aws-iam-role--cli-profile-arg)))
+
 (defun org-aws-iam-role--babel-cmd-create-policy (policy-name policy-document)
   "Return the AWS CLI command to create a customer-managed policy.
 POLICY-NAME is the name of the new policy.
@@ -928,17 +952,37 @@ Argument POLICY-TYPE is the type of the policy."
         (cmd (org-aws-iam-role--babel-cmd-detach-managed-policy role-name policy-arn)))
     (org-aws-iam-role--babel-confirm-and-run cmd action-desc)))
 
-(defun org-aws-iam-role--babel-handle-create (policy-name policy-type body)
-  "Handle the :create action for `aws-iam' babel blocks.
-Argument POLICY-NAME is the name of the new policy.
-Argument POLICY-TYPE is the type of the policy.
-Argument BODY is the JSON content of the policy."
+(defun org-aws-iam-role--babel-handle-create (role-name policy-name policy-type body)
+  "Handle the creation of a 'customer-managed' policy and optional attachment.
+If ROLE-NAME is provided, the new policy is attached to it immediately.
+ARGUMENTS: ROLE-NAME, POLICY-NAME, POLICY-TYPE, BODY."
   (if (eq policy-type 'customer-managed)
       (let* ((json-string (json-encode (json-read-from-string body)))
-             (action-desc (format "Create new customer managed policy '%s'" policy-name))
-             (cmd (org-aws-iam-role--babel-cmd-create-policy policy-name json-string)))
-        (org-aws-iam-role--babel-confirm-and-run cmd action-desc))
-    (user-error "The :CREATE flag is only for 'customer-managed' policies. For inline policies, execute without it")))
+             (create-cmd (org-aws-iam-role--babel-cmd-create-policy policy-name json-string))
+             (prompt (if role-name
+                         (format "Create policy '%s' AND attach to role '%s'" policy-name role-name)
+                       (format "Create new customer managed policy '%s'" policy-name))))
+        (if (y-or-n-p (format "%s? " prompt))
+            (progn
+              (message "Executing: Create Policy...")
+              (let* ((output (shell-command-to-string create-cmd))
+                     (parsed (json-parse-string output :object-type 'alist))
+                     (new-policy (alist-get 'Policy parsed))
+                     (new-arn (alist-get 'Arn new-policy)))
+                
+                (unless new-arn
+                  (error "Failed to retrieve ARN from create-policy output: %s" output))
+
+                (if role-name
+                    (progn
+                      (message "Executing: Attach Policy to Role...")
+                      (let ((attach-cmd (org-aws-iam-role--babel-cmd-attach-managed-policy role-name new-arn)))
+                        (shell-command-to-string attach-cmd))
+                      (format "Success! Created policy '%s' and attached it to '%s'.\nARN: %s" 
+                              policy-name role-name new-arn))
+                  (format "Success! Created policy '%s'.\nARN: %s" policy-name new-arn))))
+          (user-error "Aborted by user")))
+    (user-error "The create action is only for 'customer-managed' policies")))
 
 (defun org-aws-iam-role--babel-handle-update (role-name policy-name policy-arn policy-type body)
   "Handle the default update action for `aws-iam' babel blocks.
@@ -976,9 +1020,26 @@ PARAMS should include header arguments such as :ROLE-NAME, :POLICY-NAME,
          (policy-arn (cdr (assoc :arn params)))
          (policy-type-str (cdr (assoc :policy-type params)))
          (policy-type (when policy-type-str (intern policy-type-str)))
-         (create-p (org-aws-iam-role--param-true-p (cdr (assoc :create params))))
          (delete-p (org-aws-iam-role--param-true-p (cdr (assoc :delete params))))
-         (detach-p (org-aws-iam-role--param-true-p (cdr (assoc :detach params)))))
+         (detach-p (org-aws-iam-role--param-true-p (cdr (assoc :detach params))))
+         (create-p nil))
+
+    ;; LOGIC FOR CUSTOMER-MANAGED POLICIES ("Upsert" Logic)
+    (when (eq policy-type 'customer-managed)
+      (unless policy-name
+        (user-error "Header argument :policy-name is required for customer-managed policies"))
+      
+      ;; 1. If ARN is missing, synthesize it using the Account ID
+      (unless (and policy-arn (not (string-empty-p policy-arn)))
+        (let ((account-id (org-aws-iam-role--get-account-id)))
+          (unless account-id (error "Could not fetch AWS Account ID to construct ARN"))
+          ;; We assume default path "/" if we are synthesizing the ARN
+          (setq policy-arn (format "arn:aws:iam::%s:policy/%s" account-id policy-name))))
+
+      ;; 2. Check if this ARN actually exists in AWS
+      (if (org-aws-iam-role--policy-exists-p policy-arn)
+          (setq create-p nil)
+        (setq create-p t)))
 
     (unless (and (or role-name create-p) policy-type)
       (user-error "Missing required header arguments: :ROLE-NAME or :POLICY-TYPE"))
@@ -986,7 +1047,7 @@ PARAMS should include header arguments such as :ROLE-NAME, :POLICY-NAME,
     (cond
      (delete-p (org-aws-iam-role--babel-handle-delete role-name policy-name policy-arn policy-type))
      (detach-p (org-aws-iam-role--babel-handle-detach role-name policy-name policy-arn policy-type))
-     (create-p (org-aws-iam-role--babel-handle-create policy-name policy-type body))
+     (create-p (org-aws-iam-role--babel-handle-create role-name policy-name policy-type body))
      (t (org-aws-iam-role--babel-handle-update role-name policy-name policy-arn policy-type body)))))
 
 
