@@ -1279,17 +1279,6 @@ Return nil if the string is nil, \"nil\", or invalid."
         (parse-time-string date-string)
       (error nil))))
 
-(defun org-aws-iam-role--time-greater-p (time-a time-b)
-  "Return t if TIME-A is later than TIME-B.
-Both are time values like (HIGH LOW . USEC)."
-  (let ((high-a (car time-a))
-        (low-a (cadr time-a))
-        (high-b (car time-b))
-        (low-b (cadr time-b)))
-    (or (> high-a high-b)
-        (and (= high-a high-b)
-             (> low-a low-b)))))
-
 (defun org-aws-iam-role--extract-all-permission-statements ()
   "Parse the current buffer to find and extract all permission policy statements.
 This function uses a state machine to iterate through headlines,
@@ -1406,7 +1395,7 @@ one of its policies."
       (dolist (current-date-DECODED (cdr all-dates))
         (setq time-val-current (apply #'encode-time current-date-DECODED))
         (setq time-val-latest (apply #'encode-time latest-time-DECODED))
-        (setq is-greater (org-aws-iam-role--time-greater-p time-val-current time-val-latest))
+        (setq is-greater (time-less-p time-val-latest time-val-current))
         (when is-greater
           (setq latest-time-DECODED current-date-DECODED)))
       (setq final-time-VALUE (apply #'encode-time latest-time-DECODED))
