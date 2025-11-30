@@ -869,7 +869,7 @@ POLICY-DOCUMENT is the policy JSON string."
 
 (defun org-aws-iam-role--policy-exists-p (policy-arn)
   "Return t if the policy with POLICY-ARN exists in AWS, nil otherwise.
-Uses 'aws iam get-policy' and checks the exit code."
+Uses \"aws iam get-policy\" and checks the exit code."
   (let ((cmd (format "aws iam get-policy --policy-arn %s%s"
                      (shell-quote-argument policy-arn)
                      (org-aws-iam-role--cli-profile-arg))))
@@ -902,8 +902,8 @@ TAGS is the optional string of tags (e.g. \"Key=Owner,Value=Me\")."
 
 (defun org-aws-iam-role--tag-resource (role-name policy-arn policy-type tags)
   "Apply TAGS to an existing resource based on POLICY-TYPE.
-If POLICY-TYPE is 'trust-policy', tags the IAM Role ROLE-NAME.
-If POLICY-TYPE is 'customer-managed', tags the IAM Policy POLICY-ARN.
+If POLICY-TYPE is \='trust-policy', tags the IAM Role ROLE-NAME.
+If POLICY-TYPE is \='customer-managed', tags the IAM Policy POLICY-ARN.
 Asks for user confirmation before applying.
 Returns nil if no tagging was performed or user aborted."
   (when (and tags (not (string-empty-p tags)))
@@ -1030,7 +1030,7 @@ Argument POLICY-TYPE is the type of the policy."
     (org-aws-iam-role--babel-confirm-and-run cmd action-desc)))
 
 (defun org-aws-iam-role--babel-handle-create (role-name policy-name policy-type body &optional path tags)
-  "Handle the creation of a 'customer-managed' policy and optional attachment.
+  "Handle the creation of a \='customer-managed' policy and optional attachment.
 If ROLE-NAME is provided, the new policy is attached to it immediately.
 ARGUMENTS: ROLE-NAME, POLICY-NAME, POLICY-TYPE, BODY, PATH, TAGS."
   (if (eq policy-type 'customer-managed)
@@ -1053,7 +1053,7 @@ ARGUMENTS: ROLE-NAME, POLICY-NAME, POLICY-TYPE, BODY, PATH, TAGS."
                   (user-error "AWS CLI Error: %s" output))
 
                 ;; 2. Attempt to parse JSON safely
-                (condition-case err
+                (condition-case _err
                     (let* ((parsed (json-parse-string output :object-type 'alist))
                            (new-policy (alist-get 'Policy parsed))
                            (new-arn (alist-get 'Arn new-policy)))
@@ -1103,7 +1103,7 @@ Argument BODY is the JSON content of the policy."
    ((or (eq policy-type 'customer-managed)
         (eq policy-type 'aws-managed)
         (eq policy-type 'permissions-boundary))
-    (org-aws-iam-role--update-managed-policy-with-retry role-name policy-name policy-arn body))
+    (org-aws-iam-role--update-managed-policy-with-retry policy-name policy-arn body))
 
    (t (user-error "Unsupported policy type for modification: %s" policy-type))))
 
@@ -1138,8 +1138,8 @@ Argument BODY is the JSON content of the policy."
                                      (alist-get 'CreateDate b))))))
         (alist-get 'VersionId (car sorted))))))
 
-(defun org-aws-iam-role--update-managed-policy-with-retry (role-name policy-name policy-arn body)
-  "Update managed policy POLICY-NAME (POLICY-ARN) for ROLE-NAME with BODY.
+(defun org-aws-iam-role--update-managed-policy-with-retry (policy-name policy-arn body)
+  "Update managed policy POLICY-NAME (POLICY-ARN) with BODY.
 Handles version limits by offering to delete the oldest version."
   (let* ((json-string (json-encode (json-read-from-string body)))
          (cmd (org-aws-iam-role--babel-cmd-for-managed-policy policy-arn json-string))
