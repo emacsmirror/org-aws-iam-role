@@ -564,7 +564,7 @@ ROLE-NAME is the name of the parent IAM role."
   "Callback to populate BUF with fetched policies for ROLE.
 ALL-POLICIES-VECTOR is the resolved vector of policy structs."
   ;; Catch any error during rendering to prevent the callback from crashing.
-  (condition-case nil
+  (condition-case err
       (with-current-buffer buf
         (let ((boundary-arn (org-aws-iam-role-permissions-boundary-arn role))
               (role-name (org-aws-iam-role-name role)))
@@ -572,7 +572,7 @@ ALL-POLICIES-VECTOR is the resolved vector of policy structs."
           (org-aws-iam-role--insert-policies-section all-policies-vector boundary-arn role-name)
           ;; Insert remaining synchronous sections and finalize the buffer.
           (org-aws-iam-role--insert-remaining-sections-and-finalize role buf)))
-    (error nil)))
+    (error (message "Error populating buffer: %s" (error-message-string err)))))
 
 (defun org-aws-iam-role--populate-role-buffer (role buf)
   "Insert all details for ROLE and its policies into the buffer BUF.
