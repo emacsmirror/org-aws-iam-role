@@ -38,17 +38,18 @@
 ;; - Interactive browsing and selection of IAM roles.
 ;; - Full display of all policy types: Trust Policy, Permissions Boundary,
 ;;   AWS-Managed, Customer-Managed, and Inline policies.
-;; - Direct modification of any policy through Org Babel source blocks. Use
-;;   header arguments like `:create`, `:delete`, or `:detach` for full
-;;   CRUD (Create, Read, Update, Delete) operations.
+;; - Direct modification via Org Babel. Supports "Upsert" logic: automatically
+;;   creates policies if they don't exist, or updates them if they do.
+;; - Smart Version Management: Automatically offers to delete the oldest
+;;   policy version if the AWS version limit is reached during an update.
+;; - Advanced Header Arguments: Support for `:tags`, `:path`, and sequential
+;;   `:detach` + `:delete` operations.
 ;; - Built-in IAM Policy Simulator to test a role's permissions against
 ;;   specific AWS actions and resources.
-;; - View a combined JSON policy of all permission policies for easy export
-;;   or analysis.
+;; - View a combined JSON policy of all permission policies for easy export.
 ;; - Asynchronous fetching of initial role and policy data for a fast UI.
 ;; - Safe by default: the role viewer buffer opens in read-only mode.
 ;; - Ability to easily switch between different AWS profiles.
-;; - Clear feedback on command success or failure in Babel results blocks.
 
 ;; Keybindings:
 ;;
@@ -57,7 +58,7 @@
 ;; - C-c C-s: Simulate the role's policies against specific actions.
 ;; - C-c C-j: View a combined JSON of all permission policies.
 ;; - C-c C-a: Get service last accessed details for the role.
-;; - C-c C-m: Find the last modified date for the role or its policies.")
+;; - C-c C-m: Find the last modified date for the role or its policies.
 ;; - C-c C-c: Inside a source block, apply changes to AWS.
 ;; - C-c (:   Hide all property drawers.
 ;; - C-c ):   Reveal all property drawers.
@@ -123,6 +124,14 @@ If ROLE-NAME is provided programmatically, skip prompting."
     (setq org-aws-iam-role-profile
           (completing-read "Select AWS profile: " profiles nil t))
     (message "Set IAM Role AWS profile to: %s" org-aws-iam-role-profile)))
+
+(defun org-aws-iam-role--get-account-id ()
+  "Fetch the current AWS Account ID using sts get-caller-identity."
+  (let* ((cmd (format "aws sts get-caller-identity --output json%s"
+                      (org-aws-iam-role--cli-profile-arg)))
+         (json (shell-command-to-string cmd))
+         (parsed (json-parse-string json :object-type 'alist)))
+    (alist-get 'Account parsed)))
 
 (defun org-aws-iam-role-toggle-read-only ()
   "Toggle read-only mode in the current buffer and provide feedback."
@@ -533,19 +542,21 @@ ROLE-NAME is the name of the parent IAM role."
   (insert "** Applying Changes via Babel\n")
   (insert "All actions are performed by executing an =aws-iam= source block with =C-c C-c=.\n")
   (insert "You will be asked to confirm before any change is applied.\n")
-  (insert "\n- *To Create or Update an Inline Policy*, simply write or edit its source block and execute it. No special flag is needed.\n")
-  (insert "- *To Update any other policy*, edit its source block and execute.\n")
-  (insert "\nUse header arguments for other actions:\n")
-  (insert "- =:create t=     :: Creates a new *customer-managed* policy.\n")
-  (insert "- =:delete t=     :: Deletes a policy. For managed policies, this will fail if the policy is still attached to any role, user, or group.\n")
-  (insert "- =:detach t=     :: Detaches a *managed* policy from the current role.\n")
+  (insert "\n- *To Create a New Policy*: Provide a unique =:policy-name= and optional =:path=. If the ARN does not exist, it will be created.\n")
+  (insert "- *To Update a Policy*: Edit the JSON. If the policy has reached the version limit, you will be offered to delete the oldest version.\n")
+  (insert "- *To Tag*: Add the =:tags= header. Tagging is applied /before/ updates.\n")
+  (insert "\nUse header arguments for specific actions:\n")
+  (insert "- =:delete t=     :: Deletes the policy. If versions exist, you will be asked to recursively delete them.\n")
+  (insert "- =:detach t=     :: Detaches the policy from the current role. Can be combined with =:delete t=.\n")
+  (insert "- =:tags=         :: A string of tags (e.g. \"Key=Owner,Value=Dev Key=Stage,Value=Prod\").\n")
+  (insert "- =:path=         :: The IAM path for creation (e.g. \"/service-role/\"). Defaults to \"/\".\n")
   (insert "\n** Keybindings\n")
   (insert "- =C-c C-e= :: Toggle read-only mode to allow/prevent edits.\n")
   (insert "- =C-c C-s= :: Simulate the role's policies against specific actions.\n")
   (insert "- =C-c C-j= :: View a combined JSON of all permission policies.\n")
   (insert "- =C-c C-a= :: Get service last accessed details for the role.\n")
-  (insert "- =C-c C-c= :: Inside a source block, apply changes to AWS.\n")
   (insert "- =C-c C-m= :: Find the last modified date for the role or its policies.\n")
+  (insert "- =C-c C-c= :: Inside a source block, apply changes to AWS.\n")
   (insert "- =C-c (= :: Hide all property drawers.\n")
   (insert "- =C-c )= :: Reveal all property drawers.\n\n"))
 
@@ -856,14 +867,76 @@ POLICY-DOCUMENT is the policy JSON string."
       (or (equal val-str "t")
           (equal val-str "true")))))
 
-(defun org-aws-iam-role--babel-cmd-create-policy (policy-name policy-document)
+(defun org-aws-iam-role--policy-exists-p (policy-arn)
+  "Return t if the policy with POLICY-ARN exists in AWS, nil otherwise.
+Uses 'aws iam get-policy' and checks the exit code."
+  (let ((cmd (format "aws iam get-policy --policy-arn %s%s"
+                     (shell-quote-argument policy-arn)
+                     (org-aws-iam-role--cli-profile-arg))))
+    (eq 0 (call-process-shell-command cmd nil nil nil))))
+
+(defun org-aws-iam-role--babel-cmd-attach-managed-policy (role-name policy-arn)
+  "Return the AWS CLI command to attach a managed policy.
+ROLE-NAME is the IAM role name. POLICY-ARN is the ARN of the managed policy."
+  (format "aws iam attach-role-policy --role-name %s --policy-arn %s%s"
+          (shell-quote-argument role-name)
+          (shell-quote-argument policy-arn)
+          (org-aws-iam-role--cli-profile-arg)))
+
+(defun org-aws-iam-role--babel-cmd-create-policy (policy-name policy-document &optional path tags)
   "Return the AWS CLI command to create a customer-managed policy.
 POLICY-NAME is the name of the new policy.
-POLICY-DOCUMENT is the policy JSON string."
-  (format "aws iam create-policy --policy-name %s --policy-document %s%s"
+POLICY-DOCUMENT is the policy JSON string.
+PATH is the optional IAM path (e.g., \"/service-role/\").
+TAGS is the optional string of tags (e.g. \"Key=Owner,Value=Me\")."
+  (format "aws iam create-policy --policy-name %s --policy-document %s%s%s%s"
           (shell-quote-argument policy-name)
           (shell-quote-argument policy-document)
+          (if (and path (not (string-empty-p path)))
+              (format " --path %s" (shell-quote-argument path))
+            "")
+          (if (and tags (not (string-empty-p tags)))
+              (format " --tags %s" tags) ;; We assume user provides format "Key=K,Value=V ..."
+            "")
           (org-aws-iam-role--cli-profile-arg)))
+
+(defun org-aws-iam-role--tag-resource (role-name policy-arn policy-type tags)
+  "Apply TAGS to an existing resource based on POLICY-TYPE.
+If POLICY-TYPE is 'trust-policy', tags the IAM Role.
+If POLICY-TYPE is 'customer-managed', tags the IAM Policy.
+Asks for user confirmation before applying.
+Returns nil if no tagging was performed or user aborted."
+  (when (and tags (not (string-empty-p tags)))
+    (cond
+     ;; Case 1: Tag the Role (Context is Trust Policy)
+     ((eq policy-type 'trust-policy)
+      (let ((cmd (format "aws iam tag-role --role-name %s --tags %s%s"
+                         (shell-quote-argument role-name)
+                         tags
+                         (org-aws-iam-role--cli-profile-arg)))
+            (prompt (format "Apply tags '%s' to Role '%s'" tags role-name)))
+        (if (y-or-n-p (format "%s? " prompt))
+            (progn
+              (message "Executing: Tag Role...")
+              (shell-command-to-string cmd))
+          (message "Tagging aborted by user."))))
+
+     ;; Case 2: Tag the Managed Policy
+     ((eq policy-type 'customer-managed)
+      (let ((cmd (format "aws iam tag-policy --policy-arn %s --tags %s%s"
+                         (shell-quote-argument policy-arn)
+                         tags
+                         (org-aws-iam-role--cli-profile-arg)))
+            (prompt (format "Apply tags '%s' to Policy '%s'" tags policy-arn)))
+        (if (y-or-n-p (format "%s? " prompt))
+            (progn
+              (message "Executing: Tag Policy...")
+              (shell-command-to-string cmd))
+          (message "Tagging aborted by user."))))
+     
+     ;; Case 3: Inline
+     ((eq policy-type 'inline)
+      (message "Warning: Inline policies cannot be tagged directly. Tag the Role (Trust Policy) instead.")))))
 
 (defun org-aws-iam-role--babel-cmd-delete-inline-policy (role-name policy-name)
   "Return the AWS CLI command to delete an inline policy.
@@ -907,14 +980,42 @@ Argument POLICY-ARN is the ARN of the policy.
 Argument POLICY-TYPE is the type of the policy."
   (let (cmd action-desc)
     (cond
+     ;; CASE 1: Inline Policy
      ((eq policy-type 'inline)
       (setq action-desc (format "Permanently delete inline policy '%s' from role '%s'" policy-name role-name))
-      (setq cmd (org-aws-iam-role--babel-cmd-delete-inline-policy role-name policy-name)))
+      (setq cmd (org-aws-iam-role--babel-cmd-delete-inline-policy role-name policy-name))
+      (org-aws-iam-role--babel-confirm-and-run cmd action-desc))
+
+     ;; CASE 2: Customer Managed Policy
      ((eq policy-type 'customer-managed)
-      (setq action-desc (format "Permanently delete managed policy '%s'? (This will fail if it's still attached to any entity)" policy-arn))
-      (setq cmd (org-aws-iam-role--babel-cmd-delete-policy policy-arn)))
-     (t (user-error "Deletion is only supported for 'inline' and 'customer-managed' policies")))
-    (org-aws-iam-role--babel-confirm-and-run cmd action-desc)))
+      (let ((versions (org-aws-iam-role--get-all-non-default-versions policy-arn))
+            (delete-policy-cmd (org-aws-iam-role--babel-cmd-delete-policy policy-arn)))
+        
+        (if versions
+            ;; Sub-case: Multiple versions exist
+            (let ((count (length versions)))
+              (if (y-or-n-p (format "Policy has %d non-default versions. Delete ALL versions and the policy '%s'? " count policy-arn))
+                  (progn
+                    ;; 1. Delete all non-default versions
+                    (dolist (ver versions)
+                      (message "Deleting version %s..." ver)
+                      (let ((del-ver-cmd (format "aws iam delete-policy-version --policy-arn %s --version-id %s%s"
+                                                 (shell-quote-argument policy-arn)
+                                                 ver
+                                                 (org-aws-iam-role--cli-profile-arg))))
+                        (shell-command-to-string del-ver-cmd)))
+                    
+                    ;; 2. Delete the policy itself
+                    (message "Deleting policy %s..." policy-arn)
+                    (let ((result (string-trim (shell-command-to-string delete-policy-cmd))))
+                      (if (string-empty-p result) "Success! Policy and all versions deleted." result)))
+                (user-error "Aborted by user")))
+          
+          ;; Sub-case: No extra versions, just delete the policy
+          (setq action-desc (format "Permanently delete managed policy '%s'? (This will fail if it's still attached to any entity)" policy-arn))
+          (org-aws-iam-role--babel-confirm-and-run delete-policy-cmd action-desc))))
+
+     (t (user-error "Deletion is only supported for 'inline' and 'customer-managed' policies")))))
 
 (defun org-aws-iam-role--babel-handle-detach (role-name policy-name policy-arn policy-type)
   "Handle the :detach action for `aws-iam' babel blocks.
@@ -928,17 +1029,53 @@ Argument POLICY-TYPE is the type of the policy."
         (cmd (org-aws-iam-role--babel-cmd-detach-managed-policy role-name policy-arn)))
     (org-aws-iam-role--babel-confirm-and-run cmd action-desc)))
 
-(defun org-aws-iam-role--babel-handle-create (policy-name policy-type body)
-  "Handle the :create action for `aws-iam' babel blocks.
-Argument POLICY-NAME is the name of the new policy.
-Argument POLICY-TYPE is the type of the policy.
-Argument BODY is the JSON content of the policy."
+(defun org-aws-iam-role--babel-handle-create (role-name policy-name policy-type body &optional path tags)
+  "Handle the creation of a 'customer-managed' policy and optional attachment.
+If ROLE-NAME is provided, the new policy is attached to it immediately.
+ARGUMENTS: ROLE-NAME, POLICY-NAME, POLICY-TYPE, BODY, PATH, TAGS."
   (if (eq policy-type 'customer-managed)
       (let* ((json-string (json-encode (json-read-from-string body)))
-             (action-desc (format "Create new customer managed policy '%s'" policy-name))
-             (cmd (org-aws-iam-role--babel-cmd-create-policy policy-name json-string)))
-        (org-aws-iam-role--babel-confirm-and-run cmd action-desc))
-    (user-error "The :CREATE flag is only for 'customer-managed' policies. For inline policies, execute without it")))
+             (create-cmd (org-aws-iam-role--babel-cmd-create-policy policy-name json-string path tags))
+             (prompt (if role-name
+                         (format "Create policy '%s' (path: %s, tags: %s) AND attach to role '%s'" 
+                                 policy-name (or path "/") (or tags "none") role-name)
+                       (format "Create new customer managed policy '%s' (path: %s, tags: %s)" 
+                               policy-name (or path "/") (or tags "none")))))
+        
+        (if (y-or-n-p (format "%s? " prompt))
+            (progn
+              (message "Executing: Create Policy...")
+              ;; Capture the output and trim whitespace
+              (let ((output (string-trim (shell-command-to-string create-cmd))))
+                
+                ;; 1. Check for known CLI text errors (AWS errors often start with "An error...")
+                (when (string-prefix-p "An error" output)
+                  (user-error "AWS CLI Error: %s" output))
+
+                ;; 2. Attempt to parse JSON safely
+                (condition-case err
+                    (let* ((parsed (json-parse-string output :object-type 'alist))
+                           (new-policy (alist-get 'Policy parsed))
+                           (new-arn (alist-get 'Arn new-policy)))
+                      
+                      (unless new-arn
+                        (error "JSON parsed, but no ARN found. Full Output: %s" output))
+
+                      (if role-name
+                          (progn
+                            (message "Executing: Attach Policy to Role...")
+                            (let ((attach-cmd (org-aws-iam-role--babel-cmd-attach-managed-policy role-name new-arn)))
+                              (shell-command-to-string attach-cmd))
+                            (format "Success! Created policy '%s' and attached it to '%s'.\nARN: %s" 
+                                    policy-name role-name new-arn))
+                        ;; Else: just return success for creation
+                        (format "Success! Created policy '%s'.\nARN: %s" policy-name new-arn)))
+                  
+                  ;; 3. Catch JSON parsing errors (e.g. other non-JSON text returned)
+                  (json-parse-error
+                   (user-error "Failed to parse AWS response. The command likely failed. Output: %s" output)))))
+          (user-error "Aborted by user")))
+    (user-error "The create action is only for 'customer-managed' policies")))
 
 (defun org-aws-iam-role--babel-handle-update (role-name policy-name policy-arn policy-type body)
   "Handle the default update action for `aws-iam' babel blocks.
@@ -947,47 +1084,175 @@ Argument POLICY-NAME is the name of the policy.
 Argument POLICY-ARN is the ARN of the policy.
 Argument POLICY-TYPE is the type of the policy.
 Argument BODY is the JSON content of the policy."
+  (cond
+   ;; 1. Trust Policies (Use standard confirm-and-run)
+   ((eq policy-type 'trust-policy)
+    (let* ((json-string (json-encode (json-read-from-string body)))
+           (action-desc (format "Update Trust Policy for role '%s'" role-name))
+           (cmd (org-aws-iam-role--babel-cmd-for-trust-policy role-name json-string)))
+      (org-aws-iam-role--babel-confirm-and-run cmd action-desc)))
+
+   ;; 2. Inline Policies (Use standard confirm-and-run)
+   ((eq policy-type 'inline)
+    (let* ((json-string (json-encode (json-read-from-string body)))
+           (action-desc (format "Update inline policy '%s' for role '%s'" policy-name role-name))
+           (cmd (org-aws-iam-role--babel-cmd-for-inline-policy role-name policy-name json-string)))
+      (org-aws-iam-role--babel-confirm-and-run cmd action-desc)))
+
+   ;; 3. Managed Policies (Use new retry logic)
+   ((or (eq policy-type 'customer-managed)
+        (eq policy-type 'aws-managed)
+        (eq policy-type 'permissions-boundary))
+    (org-aws-iam-role--update-managed-policy-with-retry role-name policy-name policy-arn body))
+
+   (t (user-error "Unsupported policy type for modification: %s" policy-type))))
+
+(defun org-aws-iam-role--get-all-non-default-versions (policy-arn)
+  "Return a list of VersionIds for all non-default versions of POLICY-ARN."
+  (let* ((cmd (format "aws iam list-policy-versions --policy-arn %s --output json%s"
+                      (shell-quote-argument policy-arn)
+                      (org-aws-iam-role--cli-profile-arg)))
+         (json (shell-command-to-string cmd))
+         (parsed (condition-case nil
+                     (json-parse-string json :object-type 'alist :array-type 'list)
+                   (error nil)))
+         (versions (alist-get 'Versions parsed)))
+    (when versions
+      ;; Return only VersionIds where IsDefaultVersion is NOT true
+      (mapcar (lambda (v) (alist-get 'VersionId v))
+              (cl-remove-if (lambda (v) (eq t (alist-get 'IsDefaultVersion v))) versions)))))
+
+(defun org-aws-iam-role--get-oldest-non-default-version (policy-arn)
+  "Return the VersionId of the oldest non-default version for POLICY-ARN."
+  (let* ((cmd (format "aws iam list-policy-versions --policy-arn %s --output json%s"
+                      (shell-quote-argument policy-arn)
+                      (org-aws-iam-role--cli-profile-arg)))
+         (json (shell-command-to-string cmd))
+         (parsed (json-parse-string json :object-type 'alist :array-type 'list))
+         (versions (alist-get 'Versions parsed))
+         (non-defaults (cl-remove-if (lambda (v) (eq t (alist-get 'IsDefaultVersion v))) versions)))
+    (when non-defaults
+      (let ((sorted (sort non-defaults
+                          (lambda (a b)
+                            (string< (alist-get 'CreateDate a)
+                                     (alist-get 'CreateDate b))))))
+        (alist-get 'VersionId (car sorted))))))
+
+(defun org-aws-iam-role--update-managed-policy-with-retry (role-name policy-name policy-arn body)
+  "Update managed policy, handling version limits by offering to delete the oldest version."
   (let* ((json-string (json-encode (json-read-from-string body)))
-         (action-desc (format "Update %s for role '%s'"
-                              (if (eq policy-type 'trust-policy) "Trust Policy" (format "policy '%s'" policy-name))
-                              role-name))
-         (cmd (cond
-               ((eq policy-type 'trust-policy)
-                (org-aws-iam-role--babel-cmd-for-trust-policy role-name json-string))
-               ((eq policy-type 'inline)
-                (org-aws-iam-role--babel-cmd-for-inline-policy role-name policy-name json-string))
-               ((or (eq policy-type 'customer-managed)
-                    (eq policy-type 'aws-managed)
-                    (eq policy-type 'permissions-boundary))
-                (org-aws-iam-role--babel-cmd-for-managed-policy policy-arn json-string))
-               (t (user-error "Unsupported policy type for modification: %s" policy-type)))))
-    (org-aws-iam-role--babel-confirm-and-run cmd action-desc)))
+         (cmd (org-aws-iam-role--babel-cmd-for-managed-policy policy-arn json-string))
+         (action-desc (format "Update managed policy '%s' (ARN: %s)" (or policy-name "unknown") policy-arn)))
+    
+    (if (y-or-n-p (format "%s? " action-desc))
+        (progn
+          (message "Executing: Update Policy...")
+          (let ((result (string-trim (shell-command-to-string cmd))))
+            ;; Check for LimitExceededException in the output
+            (if (and (not (string-empty-p result))
+                     (string-match-p "LimitExceeded" result))
+                
+                ;; --- LIMIT REACHED LOGIC ---
+                (let ((oldest-ver (org-aws-iam-role--get-oldest-non-default-version policy-arn)))
+                  (if (and oldest-ver
+                           (y-or-n-p (format "Version limit reached. Delete oldest version (%s) and retry?" oldest-ver)))
+                      (progn
+                        (message "Deleting version %s..." oldest-ver)
+                        (let ((del-cmd (format "aws iam delete-policy-version --policy-arn %s --version-id %s%s"
+                                               (shell-quote-argument policy-arn)
+                                               oldest-ver
+                                               (org-aws-iam-role--cli-profile-arg))))
+                          (shell-command-to-string del-cmd))
+                        (message "Retrying update...")
+                        ;; Retry the original update command
+                        (let ((retry-result (string-trim (shell-command-to-string cmd))))
+                          (if (string-empty-p retry-result) "Success!" retry-result)))
+                    
+                    ;; User said no to deletion, or we couldn't find a version to delete
+                    (user-error "Update failed (Limit Exceeded): %s" result)))
+              
+              ;; --- NORMAL SUCCESS/FAILURE LOGIC ---
+              (if (string-match-p "An error occurred" result)
+                  (user-error "Update failed: %s" result)
+                (if (string-empty-p result) "Success!" result)))))
+      (user-error "Aborted by user"))))
 
 (defun org-babel-execute:aws-iam (body params)
   "Execute an `aws-iam' source block.
 BODY with header PARAMS to manage IAM policies.
 PARAMS should include header arguments such as :ROLE-NAME, :POLICY-NAME,
-:ARN, and :POLICY-TYPE."
+:ARN, :POLICY-TYPE, :PATH, and :TAGS."
   (when buffer-read-only
     (user-error "Buffer is read-only. Press C-c C-e to enable edits and execution"))
 
   (let* ((role-name (cdr (assoc :role-name params)))
          (policy-name (cdr (assoc :policy-name params)))
          (policy-arn (cdr (assoc :arn params)))
+         (policy-path (cdr (assoc :path params)))
+         (tags (cdr (assoc :tags params)))
          (policy-type-str (cdr (assoc :policy-type params)))
          (policy-type (when policy-type-str (intern policy-type-str)))
-         (create-p (org-aws-iam-role--param-true-p (cdr (assoc :create params))))
          (delete-p (org-aws-iam-role--param-true-p (cdr (assoc :delete params))))
-         (detach-p (org-aws-iam-role--param-true-p (cdr (assoc :detach params)))))
+         (detach-p (org-aws-iam-role--param-true-p (cdr (assoc :detach params))))
+         (create-p nil))
+
+    ;; LOGIC FOR CUSTOMER-MANAGED POLICIES ("Upsert" Logic)
+    (when (eq policy-type 'customer-managed)
+      (unless policy-name
+        (user-error "Header argument :policy-name is required for customer-managed policies"))
+      
+      ;; 1. If ARN is missing OR path is provided, synthesize/recalculate ARN
+      (when (or policy-path
+                (not policy-arn)
+                (string-empty-p policy-arn))
+        (let ((account-id (org-aws-iam-role--get-account-id)))
+          (unless account-id (error "Could not fetch AWS Account ID to construct ARN"))
+          
+          ;; Synthesize ARN: arn:aws:iam::ACCOUNT:policy/PATH/NAME
+          (let* ((raw-path (if (and policy-path (not (string-empty-p policy-path))) policy-path "/"))
+                 (p-start (if (string-prefix-p "/" raw-path) raw-path (concat "/" raw-path)))
+                 (p-full (if (string-suffix-p "/" p-start) p-start (concat p-start "/")))
+                 (clean-path (substring p-full 1)))
+            
+            (setq policy-arn (format "arn:aws:iam::%s:policy/%s%s" 
+                                     account-id clean-path policy-name)))))
+
+      ;; 2. Check existence
+      (if (org-aws-iam-role--policy-exists-p policy-arn)
+          (setq create-p nil)
+        (setq create-p t)))
 
     (unless (and (or role-name create-p) policy-type)
       (user-error "Missing required header arguments: :ROLE-NAME or :POLICY-TYPE"))
 
-    (cond
-     (delete-p (org-aws-iam-role--babel-handle-delete role-name policy-name policy-arn policy-type))
-     (detach-p (org-aws-iam-role--babel-handle-detach role-name policy-name policy-arn policy-type))
-     (create-p (org-aws-iam-role--babel-handle-create policy-name policy-type body))
-     (t (org-aws-iam-role--babel-handle-update role-name policy-name policy-arn policy-type body)))))
+    ;; We collect output messages in a list to support multiple sequential actions.
+    (let ((results '()))
+      ;; 1. TAGGING (Priority 1)
+      ;; Only if we are NOT destroying the resource.
+      (when (and (not create-p) tags (not delete-p) (not detach-p))
+        (org-aws-iam-role--tag-resource role-name policy-arn policy-type tags))
+
+      ;; 2. DETACH (Priority 2)
+      (when detach-p
+        (if (eq policy-type 'inline)
+            ;; Inline policies cannot be detached, so we skip this step gracefully
+            ;; to allow the subsequent DELETE step to handle it.
+            (message "Skipping detach for inline policy (implicit in delete).")
+          (push (org-aws-iam-role--babel-handle-detach role-name policy-name policy-arn policy-type) results)))
+
+      ;; 3. DELETE (Priority 3)
+      (when delete-p
+        (push (org-aws-iam-role--babel-handle-delete role-name policy-name policy-arn policy-type) results))
+
+      ;; 4. CREATE / UPDATE (Priority 4)
+      ;; Only run if we did NOT perform a destructive action (Detach or Delete).
+      (unless (or detach-p delete-p)
+        (if create-p
+            (push (org-aws-iam-role--babel-handle-create role-name policy-name policy-type body policy-path tags) results)
+          (push (org-aws-iam-role--babel-handle-update role-name policy-name policy-arn policy-type body) results)))
+
+      ;; Return concatenated results
+      (mapconcat #'identity (nreverse results) "\n"))))
 
 
 ;;;;; unified json start ;;;;;
