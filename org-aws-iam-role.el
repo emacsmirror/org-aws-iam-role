@@ -902,8 +902,8 @@ TAGS is the optional string of tags (e.g. \"Key=Owner,Value=Me\")."
 
 (defun org-aws-iam-role--tag-resource (role-name policy-arn policy-type tags)
   "Apply TAGS to an existing resource based on POLICY-TYPE.
-If POLICY-TYPE is 'trust-policy', tags the IAM Role.
-If POLICY-TYPE is 'customer-managed', tags the IAM Policy.
+If POLICY-TYPE is 'trust-policy', tags the IAM Role ROLE-NAME.
+If POLICY-TYPE is 'customer-managed', tags the IAM Policy POLICY-ARN.
 Asks for user confirmation before applying.
 Returns nil if no tagging was performed or user aborted."
   (when (and tags (not (string-empty-p tags)))
@@ -1037,9 +1037,9 @@ ARGUMENTS: ROLE-NAME, POLICY-NAME, POLICY-TYPE, BODY, PATH, TAGS."
       (let* ((json-string (json-encode (json-read-from-string body)))
              (create-cmd (org-aws-iam-role--babel-cmd-create-policy policy-name json-string path tags))
              (prompt (if role-name
-                         (format "Create policy '%s' (path: %s, tags: %s) AND attach to role '%s'" 
+                         (format "Create policy '%s' (path: %s, tags: %s) AND attach to role '%s'"
                                  policy-name (or path "/") (or tags "none") role-name)
-                       (format "Create new customer managed policy '%s' (path: %s, tags: %s)" 
+                       (format "Create new customer managed policy '%s' (path: %s, tags: %s)"
                                policy-name (or path "/") (or tags "none")))))
         
         (if (y-or-n-p (format "%s? " prompt))
@@ -1066,7 +1066,7 @@ ARGUMENTS: ROLE-NAME, POLICY-NAME, POLICY-TYPE, BODY, PATH, TAGS."
                             (message "Executing: Attach Policy to Role...")
                             (let ((attach-cmd (org-aws-iam-role--babel-cmd-attach-managed-policy role-name new-arn)))
                               (shell-command-to-string attach-cmd))
-                            (format "Success! Created policy '%s' and attached it to '%s'.\nARN: %s" 
+                            (format "Success! Created policy '%s' and attached it to '%s'.\nARN: %s"
                                     policy-name role-name new-arn))
                         ;; Else: just return success for creation
                         (format "Success! Created policy '%s'.\nARN: %s" policy-name new-arn)))
@@ -1139,7 +1139,8 @@ Argument BODY is the JSON content of the policy."
         (alist-get 'VersionId (car sorted))))))
 
 (defun org-aws-iam-role--update-managed-policy-with-retry (role-name policy-name policy-arn body)
-  "Update managed policy, handling version limits by offering to delete the oldest version."
+  "Update managed policy POLICY-NAME (POLICY-ARN) for ROLE-NAME with BODY.
+Handles version limits by offering to delete the oldest version."
   (let* ((json-string (json-encode (json-read-from-string body)))
          (cmd (org-aws-iam-role--babel-cmd-for-managed-policy policy-arn json-string))
          (action-desc (format "Update managed policy '%s' (ARN: %s)" (or policy-name "unknown") policy-arn)))
@@ -1214,7 +1215,7 @@ PARAMS should include header arguments such as :ROLE-NAME, :POLICY-NAME,
                  (p-full (if (string-suffix-p "/" p-start) p-start (concat p-start "/")))
                  (clean-path (substring p-full 1)))
             
-            (setq policy-arn (format "arn:aws:iam::%s:policy/%s%s" 
+            (setq policy-arn (format "arn:aws:iam::%s:policy/%s%s"
                                      account-id clean-path policy-name)))))
 
       ;; 2. Check existence
