@@ -154,7 +154,6 @@ If ROLE-NAME is provided programmatically, skip prompting."
 
 (defun org-aws-iam-role--format-tags (tags)
   "Format AWS TAGS from a list of alists into a single JSON string.
-
 Argument TAGS is a list of alists of the form
 \(\(\"Key\" . \"k1\"\) \(\"Value\" . \"v1\"\)\)."
   (when tags
@@ -199,7 +198,6 @@ Argument TAGS is a list of alists of the form
 
 (defun org-aws-iam-role--policy-get-metadata-async (policy-arn)
   "Fetch policy metadata JSON asynchronously for POLICY-ARN.
-
 Returns a promise that resolves with the raw JSON string from the
 `get-policy` command."
   (let* ((cmd (format "aws iam get-policy --policy-arn %s --output json%s"
@@ -210,7 +208,6 @@ Returns a promise that resolves with the raw JSON string from the
 
 (defun org-aws-iam-role--policy-get-version-document-async (policy-arn version-id)
   "Fetch policy document JSON for POLICY-ARN and VERSION-ID.
-
 This is an asynchronous operation using `get-policy-version`.
 Returns a promise that resolves with the raw JSON string."
   (let* ((cmd (format "aws iam get-policy-version --policy-arn %s --version-id %s --output json%s"
@@ -222,7 +219,6 @@ Returns a promise that resolves with the raw JSON string."
 
 (defun org-aws-iam-role-policy--construct-from-data (metadata policy-type document-json)
   "Construct an `org-aws-iam-role-policy` struct from resolved data.
-
 METADATA is the parsed `Policy` alist from `get-policy`.
 POLICY-TYPE is the type symbol (e.g., `aws-managed`).
 DOCUMENT-JSON is the raw JSON string from `get-policy-version`."
@@ -250,7 +246,6 @@ DOCUMENT-JSON is the raw JSON string from `get-policy-version`."
 
 (defun org-aws-iam-role--policy-from-arn-async (policy-arn policy-type)
   "Create an `org-aws-iam-role-policy` struct asynchronously from a policy ARN.
-
 Argument POLICY-ARN is the ARN of the IAM policy.
 Argument POLICY-TYPE is the type of the IAM policy.
 Returns a promise that resolves with the complete
@@ -282,7 +277,6 @@ Returns a promise that resolves with the complete
 
 (defun org-aws-iam-role-inline-policy--construct-from-json (policy-name json)
   "Construct an inline `org-aws-iam-role-policy` struct from its JSON.
-
 POLICY-NAME is the name of the inline policy. JSON is the raw
 string from the `get-role-policy` AWS CLI command."
   (let* ((parsed (json-parse-string json :object-type 'alist :array-type 'list))
@@ -299,7 +293,6 @@ string from the `get-role-policy` AWS CLI command."
 
 (defun org-aws-iam-role--inline-policy-from-name-async (role-name policy-name)
   "Fetch an inline policy asynchronously and construct a struct.
-
 Argument ROLE-NAME is the name of the IAM role.
 Argument POLICY-NAME is the name of the inline policy.
 Returns a promise that resolves with the `org-aws-iam-role-policy` struct."
@@ -317,7 +310,6 @@ Returns a promise that resolves with the `org-aws-iam-role-policy` struct."
 
 (defun org-aws-iam-role--fetch-roles-page (marker)
   "Fetch a single page of IAM roles from AWS.
-
 If MARKER is non-nil, it's used as the `--starting-token`.
 Returns a cons cell: (LIST-OF-ROLES . NEXT-MARKER)."
   (let* ((cmd (format "aws iam list-roles --output json%s%s"
@@ -356,7 +348,6 @@ Returns a cons cell: (LIST-OF-ROLES . NEXT-MARKER)."
 
 (defun org-aws-iam-role--construct (obj)
   "Create an `org-aws-iam-role` struct from a full `get-role` object.
-
 Argument OBJ is the JSON object returned by `get-role`."
   ;; PermissionsBoundary and RoleLastUsed can be nil, so we get them first.
   (let ((pb (alist-get 'PermissionsBoundary obj))
@@ -396,7 +387,6 @@ Argument OBJ is the JSON object returned by `get-role`."
 
 (defun org-aws-iam-role--split-managed-policies (attached)
   "Split ATTACHED managed policies into (customer . aws) buckets.
-
 Each bucket keeps the full alist for each policy item."
   (let ((customer '()) (aws '()))
     (dolist (p attached)
@@ -499,7 +489,6 @@ INLINE-POLICY-NAMES is a list of inline policy names."
 
 (defun org-aws-iam-role--get-all-policies-async (role)
   "Fetch all attached, inline, and boundary policies for ROLE.
-
 This function is asynchronous and returns a single promise that
 resolves with a vector of `org-aws-iam-role-policy` structs when
 all underlying fetches are complete. Returns nil if no policies
@@ -515,7 +504,6 @@ are found."
 
 (defun org-aws-iam-role--insert-policies-section (all-policies-vector boundary-arn role-name)
   "Render a vector of fetched policies into the current buffer.
-
 ALL-POLICIES-VECTOR is the result from a `promise-all' call.
 BOUNDARY-ARN is the original ARN of the boundary policy.
 ROLE-NAME is the name of the parent IAM role."
