@@ -977,14 +977,42 @@ Argument POLICY-ARN is the ARN of the policy.
 Argument POLICY-TYPE is the type of the policy."
   (let (cmd action-desc)
     (cond
+     ;; CASE 1: Inline Policy
      ((eq policy-type 'inline)
       (setq action-desc (format "Permanently delete inline policy '%s' from role '%s'" policy-name role-name))
-      (setq cmd (org-aws-iam-role--babel-cmd-delete-inline-policy role-name policy-name)))
+      (setq cmd (org-aws-iam-role--babel-cmd-delete-inline-policy role-name policy-name))
+      (org-aws-iam-role--babel-confirm-and-run cmd action-desc))
+
+     ;; CASE 2: Customer Managed Policy
      ((eq policy-type 'customer-managed)
-      (setq action-desc (format "Permanently delete managed policy '%s'? (This will fail if it's still attached to any entity)" policy-arn))
-      (setq cmd (org-aws-iam-role--babel-cmd-delete-policy policy-arn)))
-     (t (user-error "Deletion is only supported for 'inline' and 'customer-managed' policies")))
-    (org-aws-iam-role--babel-confirm-and-run cmd action-desc)))
+      (let ((versions (org-aws-iam-role--get-all-non-default-versions policy-arn))
+            (delete-policy-cmd (org-aws-iam-role--babel-cmd-delete-policy policy-arn)))
+        
+        (if versions
+            ;; Sub-case: Multiple versions exist
+            (let ((count (length versions)))
+              (if (y-or-n-p (format "Policy has %d non-default versions. Delete ALL versions and the policy '%s'? " count policy-arn))
+                  (progn
+                    ;; 1. Delete all non-default versions
+                    (dolist (ver versions)
+                      (message "Deleting version %s..." ver)
+                      (let ((del-ver-cmd (format "aws iam delete-policy-version --policy-arn %s --version-id %s%s"
+                                                 (shell-quote-argument policy-arn)
+                                                 ver
+                                                 (org-aws-iam-role--cli-profile-arg))))
+                        (shell-command-to-string del-ver-cmd)))
+                    
+                    ;; 2. Delete the policy itself
+                    (message "Deleting policy %s..." policy-arn)
+                    (let ((result (string-trim (shell-command-to-string delete-policy-cmd))))
+                      (if (string-empty-p result) "Success! Policy and all versions deleted." result)))
+                (user-error "Aborted by user")))
+          
+          ;; Sub-case: No extra versions, just delete the policy
+          (setq action-desc (format "Permanently delete managed policy '%s'? (This will fail if it's still attached to any entity)" policy-arn))
+          (org-aws-iam-role--babel-confirm-and-run delete-policy-cmd action-desc))))
+
+     (t (user-error "Deletion is only supported for 'inline' and 'customer-managed' policies")))))
 
 (defun org-aws-iam-role--babel-handle-detach (role-name policy-name policy-arn policy-type)
   "Handle the :detach action for `aws-iam' babel blocks.
@@ -1076,6 +1104,21 @@ Argument BODY is the JSON content of the policy."
 
    (t (user-error "Unsupported policy type for modification: %s" policy-type))))
 
+(defun org-aws-iam-role--get-all-non-default-versions (policy-arn)
+  "Return a list of VersionIds for all non-default versions of POLICY-ARN."
+  (let* ((cmd (format "aws iam list-policy-versions --policy-arn %s --output json%s"
+                      (shell-quote-argument policy-arn)
+                      (org-aws-iam-role--cli-profile-arg)))
+         (json (shell-command-to-string cmd))
+         (parsed (condition-case nil
+                     (json-parse-string json :object-type 'alist :array-type 'list)
+                   (error nil)))
+         (versions (alist-get 'Versions parsed)))
+    (when versions
+      ;; Return only VersionIds where IsDefaultVersion is NOT true
+      (mapcar (lambda (v) (alist-get 'VersionId v))
+              (cl-remove-if (lambda (v) (eq t (alist-get 'IsDefaultVersion v))) versions)))))
+
 (defun org-aws-iam-role--get-oldest-non-default-version (policy-arn)
   "Return the VersionId of the oldest non-default version for POLICY-ARN."
   (let* ((cmd (format "aws iam list-policy-versions --policy-arn %s --output json%s"
@@ -1131,7 +1174,6 @@ Argument BODY is the JSON content of the policy."
                 (if (string-empty-p result) "Success!" result)))))
       (user-error "Aborted by user"))))
 
-;; EXISTING FUNCTION (MODIFIED)
 (defun org-babel-execute:aws-iam (body params)
   "Execute an `aws-iam' source block.
 BODY with header PARAMS to manage IAM policies.
@@ -1156,25 +1198,23 @@ PARAMS should include header arguments such as :ROLE-NAME, :POLICY-NAME,
       (unless policy-name
         (user-error "Header argument :policy-name is required for customer-managed policies"))
       
-      ;; 1. If ARN is missing, synthesize it using the Account ID
-      (unless (and policy-arn (not (string-empty-p policy-arn)))
+      ;; 1. If ARN is missing OR path is provided, synthesize/recalculate ARN
+      (when (or policy-path
+                (not policy-arn)
+                (string-empty-p policy-arn))
         (let ((account-id (org-aws-iam-role--get-account-id)))
           (unless account-id (error "Could not fetch AWS Account ID to construct ARN"))
           
           ;; Synthesize ARN: arn:aws:iam::ACCOUNT:policy/PATH/NAME
-          ;; Fix: Normalize path to ensure it starts/ends with "/" and remove leading slash for ARN construction.
           (let* ((raw-path (if (and policy-path (not (string-empty-p policy-path))) policy-path "/"))
-                 ;; Ensure starts with /
                  (p-start (if (string-prefix-p "/" raw-path) raw-path (concat "/" raw-path)))
-                 ;; Ensure ends with /
                  (p-full (if (string-suffix-p "/" p-start) p-start (concat p-start "/")))
-                 ;; Remove leading / for the ARN format (e.g. "/dev/" -> "dev/")
                  (clean-path (substring p-full 1)))
             
             (setq policy-arn (format "arn:aws:iam::%s:policy/%s%s" 
                                      account-id clean-path policy-name)))))
 
-      ;; 2. Check if this ARN actually exists in AWS
+      ;; 2. Check existence
       (if (org-aws-iam-role--policy-exists-p policy-arn)
           (setq create-p nil)
         (setq create-p t)))
@@ -1182,18 +1222,34 @@ PARAMS should include header arguments such as :ROLE-NAME, :POLICY-NAME,
     (unless (and (or role-name create-p) policy-type)
       (user-error "Missing required header arguments: :ROLE-NAME or :POLICY-TYPE"))
 
-    ;; --- TAGGING OPERATION (Priority 1) ---
-    ;; If the resource exists (not creating) and tags are present, apply them immediately.
-    (when (and (not create-p) tags (not delete-p))
-      (org-aws-iam-role--tag-resource role-name policy-arn policy-type tags))
+    ;; We collect output messages in a list to support multiple sequential actions.
+    (let ((results '()))
+      ;; 1. TAGGING (Priority 1)
+      ;; Only if we are NOT destroying the resource.
+      (when (and (not create-p) tags (not delete-p) (not detach-p))
+        (org-aws-iam-role--tag-resource role-name policy-arn policy-type tags))
 
-    ;; --- MAIN OPERATION (Priority 2) ---
-    (cond
-     (delete-p (org-aws-iam-role--babel-handle-delete role-name policy-name policy-arn policy-type))
-     (detach-p (org-aws-iam-role--babel-handle-detach role-name policy-name policy-arn policy-type))
-     ;; If create-p is true, we pass tags to the create handler
-     (create-p (org-aws-iam-role--babel-handle-create role-name policy-name policy-type body policy-path tags))
-     (t (org-aws-iam-role--babel-handle-update role-name policy-name policy-arn policy-type body)))))
+      ;; 2. DETACH (Priority 2)
+      (when detach-p
+        (if (eq policy-type 'inline)
+            ;; Inline policies cannot be detached, so we skip this step gracefully
+            ;; to allow the subsequent DELETE step to handle it.
+            (message "Skipping detach for inline policy (implicit in delete).")
+          (push (org-aws-iam-role--babel-handle-detach role-name policy-name policy-arn policy-type) results)))
+
+      ;; 3. DELETE (Priority 3)
+      (when delete-p
+        (push (org-aws-iam-role--babel-handle-delete role-name policy-name policy-arn policy-type) results))
+
+      ;; 4. CREATE / UPDATE (Priority 4)
+      ;; Only run if we did NOT perform a destructive action (Detach or Delete).
+      (unless (or detach-p delete-p)
+        (if create-p
+            (push (org-aws-iam-role--babel-handle-create role-name policy-name policy-type body policy-path tags) results)
+          (push (org-aws-iam-role--babel-handle-update role-name policy-name policy-arn policy-type body) results)))
+
+      ;; Return concatenated results
+      (mapconcat #'identity (nreverse results) "\n"))))
 
 
 ;;;;; unified json start ;;;;;
