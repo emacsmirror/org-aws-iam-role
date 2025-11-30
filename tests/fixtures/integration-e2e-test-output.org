@@ -17,6 +17,7 @@ Use header arguments for other actions:
 - =C-c C-j= :: View a combined JSON of all permission policies.
 - =C-c C-a= :: Get service last accessed details for the role.
 - =C-c C-c= :: Inside a source block, apply changes to AWS.
+- =C-c C-m= :: Find the last modified date for the role or its policies.
 - =C-c (= :: Hide all property drawers.
 - =C-c )= :: Reveal all property drawers.
 
@@ -26,12 +27,12 @@ Use header arguments for other actions:
 :RoleID: AROAQCPT3RMBCBVAKQAPT
 :Path: /
 :Created: 2025-07-26T04:27:20+00:00
-:MaxSessionDuration: 7200
-:Description: test edit
+:MaxSessionDuration: 3600
+:Description: 
 :PermissionsBoundaryArn: arn:aws:iam::005343251202:policy/DevOpsPermBoundary
 :LastUsedDate: 2025-10-26T18:46:28+00:00
 :LastUsedRegion: us-east-1
-:Tags: {"environment":"personal","managed":"terraform","repo":"aws-iam-mode/terraform/main.tf","user_id_of_creator":"williseedAdminIDC","assumed_role_of_creator":"AWSReservedSSO_personal-full-admin_a401bb7d90ea7c07","test":"test"}
+:Tags: {"environment":"personal","managed":"terraform","repo":"aws-iam-mode/terraform/main.tf","user_id_of_creator":"williseedAdminIDC","assumed_role_of_creator":"AWSReservedSSO_personal-full-admin_a401bb7d90ea7c07"}
 :END:
 ** Permission Policies
 *** AmazonSSMManagedInstanceCore
@@ -104,9 +105,9 @@ Use header arguments for other actions:
 :Path: /
 :Description: Provides read only access to CloudWatch.
 :Created: 2015-02-06T18:40:01+00:00
-:Updated: 2025-10-08T17:34:07+00:00
+:Updated: 2025-11-20T19:34:11+00:00
 :AttachmentCount: 1
-:DefaultVersion: v12
+:DefaultVersion: v13
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "CloudWatchReadOnlyAccess" :policy-type "aws-managed" :arn "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess" :results output
 {
@@ -204,6 +205,18 @@ Use header arguments for other actions:
         "arn:aws:servicequotas:*:*:elasticloadbalancing/*",
         "arn:aws:servicequotas:*:*:ec2/*"
       ]
+    },
+    {
+      "Sid": "CloudWatchResourceExplorerPermissions",
+      "Effect": "Allow",
+      "Action": [
+        "resource-explorer-2:ListIndexes",
+        "resource-explorer-2:Search"
+      ],
+      "Resource": [
+        "arn:aws:resource-explorer-2:*::view/AWSServiceViewForApplicationSignals/service-view",
+        "arn:aws:resource-explorer-2:*::view/AWSServiceViewForApplicationSignalsOrgScopeProd/service-view"
+      ]
     }
   ]
 }
@@ -281,6 +294,55 @@ Use header arguments for other actions:
       }
     }
   ]
+}
+#+END_SRC
+*** test-iam-package-example-policy-name
+:PROPERTIES:
+:AWSPolicyType: Customer Managed
+:ID: ANPAQCPT3RMBDCTW4WADR
+:ARN: arn:aws:iam::005343251202:policy/test-iam-package-example-policy-name
+:Path: /
+:Description: Policy to test added access to roles
+:Created: 2025-07-26T04:27:20+00:00
+:Updated: 2025-07-26T04:27:20+00:00
+:AttachmentCount: 1
+:DefaultVersion: v1
+:END:
+#+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-example-policy-name" :policy-type "customer-managed" :arn "arn:aws:iam::005343251202:policy/test-iam-package-example-policy-name" :results output
+{
+  "Statement": [
+    {
+      "Action": "s3:List*",
+      "Effect": "Allow",
+      "Resource": "*",
+      "Sid": "AdditionalAccess"
+    }
+  ],
+  "Version": "2012-10-17"
+}
+#+END_SRC
+*** test-iam-package-extra-policy-3
+:PROPERTIES:
+:AWSPolicyType: Customer Managed
+:ID: ANPAQCPT3RMBNVN3G5U6X
+:ARN: arn:aws:iam::005343251202:policy/test-iam-package-extra-policy-3
+:Path: /
+:Description: Extra policy 3
+:Created: 2025-11-30T16:43:37+00:00
+:Updated: 2025-11-30T16:43:37+00:00
+:AttachmentCount: 1
+:DefaultVersion: v1
+:END:
+#+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-extra-policy-3" :policy-type "customer-managed" :arn "arn:aws:iam::005343251202:policy/test-iam-package-extra-policy-3" :results output
+{
+  "Statement": [
+    {
+      "Action": "cloudwatch:ListMetrics",
+      "Effect": "Allow",
+      "Resource": "*"
+    }
+  ],
+  "Version": "2012-10-17"
 }
 #+END_SRC
 *** test-iam-package-extra-policy-1
@@ -451,6 +513,30 @@ Use header arguments for other actions:
   ]
 }
 #+END_SRC
+*** test-iam-package-inline5
+:PROPERTIES:
+:AWSPolicyType: Inline
+:ID: nil
+:ARN: 
+:Path: nil
+:Description: nil
+:Created: nil
+:Updated: nil
+:AttachmentCount: nil
+:DefaultVersion: nil
+:END:
+#+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-inline5" :policy-type "inline" :arn "" :results output
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "lambda:ListFunctions",
+      "Effect": "Allow",
+      "Resource": "*"
+    }
+  ]
+}
+#+END_SRC
 *** test-iam-package-inline6
 :PROPERTIES:
 :AWSPolicyType: Inline
@@ -517,6 +603,30 @@ Use header arguments for other actions:
   "Statement": [
     {
       "Action": "sqs:ListQueues",
+      "Effect": "Allow",
+      "Resource": "*"
+    }
+  ]
+}
+#+END_SRC
+*** test-iam-package-inline9
+:PROPERTIES:
+:AWSPolicyType: Inline
+:ID: nil
+:ARN: 
+:Path: nil
+:Description: nil
+:Created: nil
+:Updated: nil
+:AttachmentCount: nil
+:DefaultVersion: nil
+:END:
+#+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-inline9" :policy-type "inline" :arn "" :results output
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "iam:ListRoles",
       "Effect": "Allow",
       "Resource": "*"
     }
@@ -741,7 +851,7 @@ Use header arguments for other actions:
     {
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::005343251202:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_personal-full-admin_a401bb7d90ea7c07"
+        "Service": "lambda.amazonaws.com"
       },
       "Action": "sts:AssumeRole"
     }
