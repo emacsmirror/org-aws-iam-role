@@ -5,8 +5,8 @@
 ;; Author: William Bosch-Bello <williamsbosch@gmail.com>
 ;; Maintainer: William Bosch-Bello <williamsbosch@gmail.com>
 ;; Created: August 16, 2025
-;; Version: 1.6.0
-;; Package-Version: 1.6.0
+;; Version: 1.6.1
+;; Package-Version: 1.6.1
 ;; Package-Requires: ((emacs "29.1") (async "1.9") (promise "1.1"))
 ;; Keywords: aws, iam, org, babel, tools
 ;; URL: https://github.com/will-abb/org-aws-iam-role
@@ -1323,7 +1323,12 @@ processed statement alists."
               (when src-block
                 (let* ((json-string (org-element-property :value src-block))
                        (policy-data (json-parse-string json-string :object-type 'alist :array-type 'list))
-                       (statements (alist-get 'Statement policy-data)))
+                       (raw-statements (alist-get 'Statement policy-data))
+                       (statements (if (and (consp raw-statements)
+                                            (consp (car raw-statements))
+                                            (atom (caar raw-statements)))
+                                       (list raw-statements)
+                                     raw-statements)))
                   (when statements
                     (dolist (stmt statements)
                       (let* ((stmt-no-sid (cl-remove 'Sid stmt :key #'car))
