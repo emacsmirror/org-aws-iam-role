@@ -1,6 +1,6 @@
 # Org AWS IAM Role for Emacs
 
-`org-aws-iam-role.el` is an Emacs package for inspecting **and modifying** AWS IAM roles and their policy documents. It renders all role data—including trust policies, permissions boundaries, and all associated policies (AWS managed, customer managed, and inline)—in an interactive Org-mode buffer. It also includes a powerful IAM policy simulator to test a role's permissions against specific actions and resources directly within Emacs.
+`org-aws-iam-role.el` is an Emacs package for inspecting **and modifying** AWS IAM roles and their policy documents. It renders all role data—including trust policies, permissions boundaries, and all associated policies (AWS managed, customer managed, and inline)—in an interactive Org-mode buffer. It also includes IAM policy simulator to test a role's permissions against specific actions and resources directly within Emacs.
 
 This package uses Org Babel and the AWS CLI under the hood, allowing you to edit policies directly in the buffer and apply them to your AWS account. All initial policy data is fetched **asynchronously and in parallel**.
 
@@ -106,7 +106,6 @@ Optional variables for customizing behavior:
 
 ```elisp
 (setq org-aws-iam-role-profile "my-profile") ;; Use a specific AWS CLI profile
-(setq org-aws-iam-role-read-only-by-default t) ;; Open buffers in read-only mode
 (setq org-aws-iam-role-show-folded-by-default t) ;; Show Org buffer folded by default
 (setq org-aws-iam-role-fullscreen nil) ;; Prevent the buffer from taking the full frame
 ```
