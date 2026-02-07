@@ -40,7 +40,7 @@
       (with-temp-buffer
         (org-aws-iam-role-populate-role-buffer role-struct (current-buffer))
         ;; CRITICAL: We must wait for the asynchronous policy fetching to complete.
-        (sleep-for 10)
+        (sleep-for 15)
         (goto-char (point-min))
         (let ((buf-str (buffer-string)))
           (message "DEBUG buffer-start=%s"
@@ -70,7 +70,7 @@
 
     ;; Call the main entry point to create the buffer.
     (org-aws-iam-role-view-details test-role-name)
-    (sleep-for 10)
+    (sleep-for 15)
 
     (let* ((role-buffer
             (cl-find-if (lambda (buf)
