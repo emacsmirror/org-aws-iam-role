@@ -12,21 +12,21 @@
 
 ;; First test: basic fetch
 (ert-deftest org-aws-iam-role/get-full-basic-test ()
-  "Call `org-aws-iam-role-get-full` with a test role and log result."
+  "Call `org-aws-iam-role--get-full` with a test role and log result."
   (let ((test-role-name "test-iam-packageIamRole")
         (org-aws-iam-role-profile "williseed-iam-tester"))
-    (message "DEBUG calling org-aws-iam-role-get-full with %S" test-role-name)
-    (let ((role-obj (org-aws-iam-role-get-full test-role-name)))
+    (message "DEBUG calling org-aws-iam-role--get-full with %S" test-role-name)
+    (let ((role-obj (org-aws-iam-role--get-full test-role-name)))
       (message "DEBUG role-obj=%S" role-obj)
       (should role-obj))))
 
 ;; Second test: construct struct from role object
 (ert-deftest org-aws-iam-role/construct-basic-test ()
-  "Call `org-aws-iam-role-construct` on role object and check struct."
+  "Call `org-aws-iam-role--construct` on role object and check struct."
   (let ((test-role-name "test-iam-packageIamRole")
         (org-aws-iam-role-profile "williseed-iam-tester"))
-    (let* ((role-obj (org-aws-iam-role-get-full test-role-name))
-           (role-struct (org-aws-iam-role-construct role-obj)))
+    (let* ((role-obj (org-aws-iam-role--get-full test-role-name))
+           (role-struct (org-aws-iam-role--construct role-obj)))
       (message "DEBUG role-struct=%S" role-struct)
       (should (org-aws-iam-role-p role-struct)))))
 
@@ -35,12 +35,12 @@
   "Populate a buffer with role details and check it contains expected markers."
   (let ((test-role-name "test-iam-packageIamRole")
         (org-aws-iam-role-profile "williseed-iam-tester"))
-    (let* ((role-obj (org-aws-iam-role-get-full test-role-name))
-           (role-struct (org-aws-iam-role-construct role-obj)))
+    (let* ((role-obj (org-aws-iam-role--get-full test-role-name))
+           (role-struct (org-aws-iam-role--construct role-obj)))
       (with-temp-buffer
-        (org-aws-iam-role-populate-role-buffer role-struct (current-buffer))
+        (org-aws-iam-role--populate-role-buffer role-struct (current-buffer))
         ;; CRITICAL: We must wait for the asynchronous policy fetching to complete.
-        (sleep-for 10)
+        (sleep-for 15)
         (goto-char (point-min))
         (let ((buf-str (buffer-string)))
           (message "DEBUG buffer-start=%s"
@@ -70,7 +70,7 @@
 
     ;; Call the main entry point to create the buffer.
     (org-aws-iam-role-view-details test-role-name)
-    (sleep-for 10)
+    (sleep-for 15)
 
     (let* ((role-buffer
             (cl-find-if (lambda (buf)

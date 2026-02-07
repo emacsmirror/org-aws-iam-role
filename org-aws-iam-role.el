@@ -5,8 +5,8 @@
 ;; Author: William Bosch-Bello <williamsbosch@gmail.com>
 ;; Maintainer: William Bosch-Bello <williamsbosch@gmail.com>
 ;; Created: August 16, 2025
-;; Version: 1.6.4
-;; Package-Version: 1.6.4
+;; Version: 1.6.5
+;; Package-Version: 1.6.5
 ;; Package-Requires: ((emacs "29.1") (async "1.9") (promise "1.1"))
 ;; Keywords: aws, iam, org, babel, tools
 ;; URL: https://github.com/will-abb/org-aws-iam-role
@@ -172,6 +172,13 @@ Argument TAGS is a list of alists of the form
                                         (alist-get 'Value tag)))
                                 tags)))
       (json-encode simple-alist))))
+
+(defun org-aws-iam-role--tags-valid-p (tags)
+  "Return t when TAGS is a space-separated list of AWS CLI Key=...,Value=... pairs."
+  (let* ((trimmed (string-trim tags))
+         (parts (split-string trimmed "[[:space:]]+" t))
+         (re "\\`Key=[^,[:space:]]+,Value=.+\\'"))
+    (and parts (cl-every (lambda (p) (string-match-p re p)) parts))))
 
 (cl-defstruct org-aws-iam-role
   name
@@ -541,10 +548,11 @@ ROLE-NAME is the name of the parent IAM role."
   (insert "\n- *To Create a New Policy*: Provide a unique =:policy-name= and optional =:path=. If the ARN does not exist, it will be created.\n")
   (insert "- *To Update a Policy*: Edit the JSON. If the policy has reached the version limit, you will be offered to delete the oldest version.\n")
   (insert "- *To Tag*: Add the =:tags= header. Tagging is applied /before/ updates.\n")
+  (insert "  - *Warning*: =:tags= must be a quoted string in AWS format (e.g. \"Key=Owner,Value=Dev Key=Stage,Value=Prod\").\n")
   (insert "\nUse header arguments for specific actions:\n")
   (insert "- =:delete t=     :: Deletes the policy. If versions exist, you will be asked to recursively delete them.\n")
   (insert "- =:detach t=     :: Detaches the policy from the current role. Can be combined with =:delete t=.\n")
-  (insert "- =:tags=         :: A string of tags (e.g. \"Key=Owner,Value=Dev Key=Stage,Value=Prod\").\n")
+  (insert "- =:tags=         :: A *quoted* string of tags (e.g. \"Key=Owner,Value=Dev Key=Stage,Value=Prod\").\n")
   (insert "- =:path=         :: The IAM path for creation (e.g. \"/service-role/\"). Defaults to \"/\".\n")
   (insert "\n** Keybindings\n")
   (insert "- =C-c C-e= :: Toggle read-only mode to allow/prevent edits.\n")
@@ -1194,6 +1202,14 @@ PARAMS should include header arguments such as :ROLE-NAME, :POLICY-NAME,
          (delete-p (org-aws-iam-role--param-true-p (cdr (assoc :delete params))))
          (detach-p (org-aws-iam-role--param-true-p (cdr (assoc :detach params))))
          (create-p nil))
+
+    ;; Validate :tags early to avoid confusing AWS CLI errors.
+    (when (assoc :tag params)
+      (user-error "Unknown header :tag. Did you mean :tags?"))
+    (when (and tags (not (stringp tags)))
+      (user-error ":tags must be a quoted string in AWS format, e.g. \"Key=Owner,Value=Dev\""))
+    (when (and (stringp tags) (not (string-empty-p tags)) (not (org-aws-iam-role--tags-valid-p tags)))
+      (user-error ":tags must be in AWS format: \"Key=Owner,Value=Dev Key=Stage,Value=Prod\""))
 
     ;; LOGIC FOR CUSTOMER-MANAGED POLICIES ("Upsert" Logic)
     (when (eq policy-type 'customer-managed)
