@@ -81,7 +81,7 @@ Emacs libraries used: `cl-lib`, `json`, `url-util`, `async`, `promise`, `ob-shel
 |:----------------|:-----------------------------------------------------------|:-----------------------|
 | `:policy-name`  | Required for creation. The name of the policy.             | `"MyPolicy"`           |
 | `:path`         | Optional. IAM path for the policy (creation only).         | `"/service-role/"`     |
-| `:tags`         | Optional. Space-separated Key=Value pairs.                 | `"Key=Env,Value=Prod"` |
+| `:tags`         | Optional. Must be a quoted string of AWS tag pairs in `Key=...,Value=...` format (space-separated). | `"Key=Env,Value=Prod"` |
 | `:detach t`     | Detach the policy from the role.                           | `:detach t`            |
 | `:delete t`     | Delete the policy. Recursively deletes versions if needed. | `:delete t`            |
 
