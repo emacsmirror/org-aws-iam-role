@@ -6,11 +6,12 @@ You will be asked to confirm before any change is applied.
 - *To Create a New Policy*: Provide a unique =:policy-name= and optional =:path=. If the ARN does not exist, it will be created.
 - *To Update a Policy*: Edit the JSON. If the policy has reached the version limit, you will be offered to delete the oldest version.
 - *To Tag*: Add the =:tags= header. Tagging is applied /before/ updates.
+  - *Warning*: =:tags= must be a quoted string in AWS format (e.g. "Key=Owner,Value=Dev Key=Stage,Value=Prod").
 
 Use header arguments for specific actions:
 - =:delete t=     :: Deletes the policy. If versions exist, you will be asked to recursively delete them.
 - =:detach t=     :: Detaches the policy from the current role. Can be combined with =:delete t=.
-- =:tags=         :: A string of tags (e.g. "Key=Owner,Value=Dev Key=Stage,Value=Prod").
+- =:tags=         :: A *quoted* string of tags (e.g. "Key=Owner,Value=Dev Key=Stage,Value=Prod").
 - =:path=         :: The IAM path for creation (e.g. "/service-role/"). Defaults to "/".
 
 ** Keybindings
@@ -108,9 +109,9 @@ Use header arguments for specific actions:
 :Path: /
 :Description: Provides read only access to CloudWatch.
 :Created: 2015-02-06T18:40:01+00:00
-:Updated: 2025-11-20T19:34:11+00:00
+:Updated: 2025-12-02T16:49:09+00:00
 :AttachmentCount: 1
-:DefaultVersion: v13
+:DefaultVersion: v14
 :Tags: null
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "CloudWatchReadOnlyAccess" :policy-type "aws-managed" :arn "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess" :results output
@@ -154,6 +155,12 @@ Use header arguments for specific actions:
         "observabilityadmin:ListTelemetryRulesForOrganization",
         "observabilityadmin:GetTelemetryEnrichmentStatus",
         "observabilityadmin:ListTagsForResource",
+        "observabilityadmin:GetTelemetryPipeline",
+        "observabilityadmin:ListTelemetryPipelines",
+        "observabilityadmin:TestTelemetryPipeline",
+        "observabilityadmin:ValidateTelemetryPipelineConfiguration",
+        "observabilityadmin:GetS3TableIntegration",
+        "observabilityadmin:ListS3TableIntegrations",
         "sns:Get*",
         "sns:List*",
         "rum:BatchGet*",
@@ -310,9 +317,9 @@ Use header arguments for specific actions:
 :Path: /
 :Description: Extra policy 3
 :Created: 2025-11-30T20:46:20+00:00
-:Updated: 2025-11-30T20:46:20+00:00
+:Updated: 2025-11-30T22:02:00+00:00
 :AttachmentCount: 1
-:DefaultVersion: v1
+:DefaultVersion: v2
 :Tags: {"environment":"personal","managed":"terraform","repo":"aws-iam-mode/terraform/main.tf"}
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-extra-policy-3" :policy-type "customer-managed" :arn "arn:aws:iam::005343251202:policy/test-iam-package-extra-policy-3" :results output
@@ -352,20 +359,20 @@ Use header arguments for specific actions:
   "Version": "2012-10-17"
 }
 #+END_SRC
-*** test-iam-package-example-policy-name
+*** test-iam-package-example-policy-name-2
 :PROPERTIES:
 :AWSPolicyType: Customer Managed
-:ID: ANPAQCPT3RMBO3HOWDIYX
-:ARN: arn:aws:iam::005343251202:policy/test-iam-package-example-policy-name
-:Path: /
-:Description: Policy to test added access to roles
-:Created: 2025-11-30T20:46:20+00:00
-:Updated: 2025-11-30T20:46:20+00:00
+:ID: ANPAQCPT3RMBP4NWCJ7NU
+:ARN: arn:aws:iam::005343251202:policy/service-role/test-iam-package-example-policy-name-2
+:Path: /service-role/
+:Description: nil
+:Created: 2025-11-30T21:16:27+00:00
+:Updated: 2025-11-30T21:16:27+00:00
 :AttachmentCount: 1
 :DefaultVersion: v1
-:Tags: {"environment":"personal","managed":"terraform","repo":"aws-iam-mode/terraform/main.tf"}
+:Tags: null
 :END:
-#+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-example-policy-name" :policy-type "customer-managed" :arn "arn:aws:iam::005343251202:policy/test-iam-package-example-policy-name" :results output
+#+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-example-policy-name-2" :policy-type "customer-managed" :arn "arn:aws:iam::005343251202:policy/service-role/test-iam-package-example-policy-name-2" :results output
 {
   "Statement": [
     {
@@ -376,6 +383,56 @@ Use header arguments for specific actions:
     }
   ],
   "Version": "2012-10-17"
+}
+#+END_SRC
+*** test-iam-package-example-policy-name-2-3
+:PROPERTIES:
+:AWSPolicyType: Customer Managed
+:ID: ANPAQCPT3RMBLI4J5GKZX
+:ARN: arn:aws:iam::005343251202:policy/random/custom/path/test-iam-package-example-policy-name-2-3
+:Path: /random/custom/path/
+:Description: nil
+:Created: 2025-11-30T21:20:07+00:00
+:Updated: 2025-11-30T21:20:07+00:00
+:AttachmentCount: 1
+:DefaultVersion: v1
+:Tags: {"Environment":"Test","Owner":"DevOps"}
+:END:
+#+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-iam-package-example-policy-name-2-3" :policy-type "customer-managed" :arn "arn:aws:iam::005343251202:policy/random/custom/path/test-iam-package-example-policy-name-2-3" :results output
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "*",
+      "Resource": "*"
+    }
+  ]
+}
+#+END_SRC
+*** test-babel-policy
+:PROPERTIES:
+:AWSPolicyType: Customer Managed
+:ID: ANPAQCPT3RMBFGPOQTALN
+:ARN: arn:aws:iam::005343251202:policy/random/custom/path/test-babel-policy
+:Path: /random/custom/path/
+:Description: nil
+:Created: 2025-11-30T22:05:33+00:00
+:Updated: 2025-11-30T22:05:33+00:00
+:AttachmentCount: 1
+:DefaultVersion: v1
+:Tags: {"Environment":"Test","Owner":"DevOps"}
+:END:
+#+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "test-babel-policy" :policy-type "customer-managed" :arn "arn:aws:iam::005343251202:policy/random/custom/path/test-babel-policy" :results output
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "*",
+      "Resource": "*"
+    }
+  ]
 }
 #+END_SRC
 *** test-iam-package-extra-policy-2
