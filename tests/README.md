@@ -3,6 +3,7 @@
 This directory contains ERT integration tests that exercise `org-aws-iam-role` end to end against AWS.
 They fetch a real role, build the buffer, and (for the regression test) compare the generated buffer
 to the golden file in `tests/fixtures/integration-e2e-test-output.org` after normalizing timestamps.
+It also includes lightweight unit tests for local tag format normalization.
 
 ## Test Summary
 
@@ -10,11 +11,18 @@ to the golden file in `tests/fixtures/integration-e2e-test-output.org` after nor
 - `org-aws-iam-role/construct-basic-test` — Builds the internal role struct from the fetched object.
 - `org-aws-iam-role/populate-buffer-basic-test` — Populates a buffer with role details, waits for async fetches, and checks for expected headings.
 - `org-aws-iam-role/regression-test-against-golden-file` — Runs the main view command and compares the buffer output to the golden file after normalizing timestamps.
+- `org-aws-iam-role/normalize-tags-*` and `org-aws-iam-role/tags-valid-p-*` — Validate comma+space-delimited tag normalization/validation behavior without AWS calls.
 
 ## Run All Tests (Non-Interactive)
 
 ```sh
 emacs -Q --batch -L . -l tests/integration-e2e-test.el -f ert-run-tests-batch-and-exit
+```
+
+## Run Tag Unit Tests Only (No AWS Calls)
+
+```sh
+emacs -Q --batch -L . -l tests/tag-format-test.el -f ert-run-tests-batch-and-exit
 ```
 
 ## Run Interactively

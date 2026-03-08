@@ -5,13 +5,13 @@ You will be asked to confirm before any change is applied.
 
 - *To Create a New Policy*: Provide a unique =:policy-name= and optional =:path=. If the ARN does not exist, it will be created.
 - *To Update a Policy*: Edit the JSON. If the policy has reached the version limit, you will be offered to delete the oldest version.
-- *To Tag*: Add the =:tags= header. Tagging is applied /before/ updates.
-  - *Warning*: =:tags= must be a quoted string in AWS format (e.g. "Key=Owner,Value=Dev Key=Stage,Value=Prod").
+- *To Tag*: Add the =:tags= header for policy/trust-policy blocks, or press =C-c C-t= to tag the role directly.
+  - *Format*: =:tags= is a quoted list of tag pairs separated by =", "= (e.g. "owner=hello there, name=noneya").
 
 Use header arguments for specific actions:
 - =:delete t=     :: Deletes the policy. If versions exist, you will be asked to recursively delete them.
 - =:detach t=     :: Detaches the policy from the current role. Can be combined with =:delete t=.
-- =:tags=         :: A *quoted* string of tags (e.g. "Key=Owner,Value=Dev Key=Stage,Value=Prod").
+- =:tags=         :: A *quoted* string of tags (e.g. "owner=hello there, name=noneya").
 - =:path=         :: The IAM path for creation (e.g. "/service-role/"). Defaults to "/".
 
 ** Keybindings
@@ -20,6 +20,7 @@ Use header arguments for specific actions:
 - =C-c C-j= :: View a combined JSON of all permission policies.
 - =C-c C-a= :: Get service last accessed details for the role.
 - =C-c C-m= :: Find the last modified date for the role or its policies.
+- =C-c C-t= :: Add one or more tags directly to the current role.
 - =C-c C-c= :: Inside a source block, apply changes to AWS.
 - =C-c (= :: Hide all property drawers.
 - =C-c )= :: Reveal all property drawers.
@@ -35,7 +36,7 @@ Use header arguments for specific actions:
 :PermissionsBoundaryArn: arn:aws:iam::005343251202:policy/DevOpsPermBoundary
 :LastUsedDate: nil
 :LastUsedRegion: nil
-:Tags: {"repo":"aws-iam-mode/terraform/main.tf","user_id_of_creator":"williseedAdminIDC","assumed_role_of_creator":"AWSReservedSSO_personal-full-admin_a401bb7d90ea7c07","environment":"personal","managed":"terraform"}
+:Tags: {"hello":"yes no","owner":"no","champ":"true","repo":"aws-iam-mode/terraform/main.tf","user_id_of_creator":"williseedAdminIDC","assumed_role_of_creator":"AWSReservedSSO_personal-full-admin_a401bb7d90ea7c07","environment":"personal","managed":"terraform"}
 :END:
 ** Permission Policies
 *** AmazonSSMManagedInstanceCore
@@ -109,9 +110,9 @@ Use header arguments for specific actions:
 :Path: /
 :Description: Provides read only access to CloudWatch.
 :Created: 2015-02-06T18:40:01+00:00
-:Updated: 2025-12-02T16:49:09+00:00
+:Updated: 2026-02-12T18:01:50+00:00
 :AttachmentCount: 1
-:DefaultVersion: v14
+:DefaultVersion: v24
 :Tags: null
 :END:
 #+BEGIN_SRC aws-iam :role-name "test-iam-packageIamRole" :policy-name "CloudWatchReadOnlyAccess" :policy-type "aws-managed" :arn "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess" :results output
