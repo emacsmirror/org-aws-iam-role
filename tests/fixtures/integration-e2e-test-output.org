@@ -5,13 +5,13 @@ You will be asked to confirm before any change is applied.
 
 - *To Create a New Policy*: Provide a unique =:policy-name= and optional =:path=. If the ARN does not exist, it will be created.
 - *To Update a Policy*: Edit the JSON. If the policy has reached the version limit, you will be offered to delete the oldest version.
-- *To Tag*: Add the =:tags= header. Tagging is applied /before/ updates.
-  - *Warning*: =:tags= must be a quoted string in AWS format (e.g. "Key=Owner,Value=Dev Key=Stage,Value=Prod").
+- *To Tag*: Add the =:tags= header for policy/trust-policy blocks, or press =C-c C-t= to tag the role directly.
+  - *Format*: =:tags= is a quoted AWS tag string (e.g. "Key=Owner,Value=Dev key=stage,value=prod"). =Key/value= and =key/value= are both accepted.
 
 Use header arguments for specific actions:
 - =:delete t=     :: Deletes the policy. If versions exist, you will be asked to recursively delete them.
 - =:detach t=     :: Detaches the policy from the current role. Can be combined with =:delete t=.
-- =:tags=         :: A *quoted* string of tags (e.g. "Key=Owner,Value=Dev Key=Stage,Value=Prod").
+- =:tags=         :: A *quoted* string of tags (e.g. "Key=Owner,Value=Dev key=stage,value=prod").
 - =:path=         :: The IAM path for creation (e.g. "/service-role/"). Defaults to "/".
 
 ** Keybindings
@@ -20,6 +20,7 @@ Use header arguments for specific actions:
 - =C-c C-j= :: View a combined JSON of all permission policies.
 - =C-c C-a= :: Get service last accessed details for the role.
 - =C-c C-m= :: Find the last modified date for the role or its policies.
+- =C-c C-t= :: Add one or more tags directly to the current role.
 - =C-c C-c= :: Inside a source block, apply changes to AWS.
 - =C-c (= :: Hide all property drawers.
 - =C-c )= :: Reveal all property drawers.

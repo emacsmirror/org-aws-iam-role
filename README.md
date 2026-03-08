@@ -19,7 +19,8 @@ This package uses Org Babel and the AWS CLI under the hood, allowing you to edit
       * Supports Trust Policies, Permissions Boundaries, Customer-Managed, AWS-Managed, and Inline policies.
   * **Smart Upsert Logic**: Automatically detects if a policy needs to be created or updated based on the Name/Path/ARN.
   * **Version Management**: If a managed policy hits the AWS version limit (usually 5), the package offers to delete the oldest non-default version and retry the update automatically.
-  * **Tagging & Paths**: Support for adding tags (`:tags`) and specifying IAM paths (`:path`) during creation or updates.
+  * **Tagging & Paths**: Support for adding tags (`:tags`) and specifying IAM paths (`:path`) during creation or updates. Tag field names are case-insensitive (`Key/Value` or `key/value`).
+  * **Role Tagging Shortcut**: Add one or more tags directly to the current role with `C-c C-t`.
   * **Sequential Operations**: Support for detaching and deleting policies in a single execution (`:detach t :delete t`).
   * **IAM Policy Simulator**: Test the role's permissions against a list of actions and resources using `iam:SimulatePrincipalPolicy` (`C-c C-s`).
   * **View Combined Permissions**: Generate a single, unified JSON policy from all permission policies (`Customer-Managed`, `AWS-Managed`, and `Inline`) for a holistic view (`C-c C-j`).
@@ -73,6 +74,7 @@ Emacs libraries used: `cl-lib`, `json`, `url-util`, `async`, `promise`, `ob-shel
     b.  Modify the JSON inside any policy's source block.
     c.  Press `C-c C-c` inside the block to apply the changes to AWS.
     d.  View the success or failure message in the `#+RESULTS:` block that appears.
+    e.  To tag the role directly, press `C-c C-t` and enter a space-separated tag list.
 5.  To test the role's effective permissions, press `C-c C-s` at any time to open the IAM policy simulator.
 
 ### Babel Header Arguments
@@ -81,7 +83,7 @@ Emacs libraries used: `cl-lib`, `json`, `url-util`, `async`, `promise`, `ob-shel
 |:----------------|:-----------------------------------------------------------|:-----------------------|
 | `:policy-name`  | Required for creation. The name of the policy.             | `"MyPolicy"`           |
 | `:path`         | Optional. IAM path for the policy (creation only).         | `"/service-role/"`     |
-| `:tags`         | Optional. Must be a quoted string of AWS tag pairs in `Key=...,Value=...` format (space-separated). | `"Key=Env,Value=Prod"` |
+| `:tags`         | Optional. Must be a quoted string of AWS tag pairs in `Key=...,Value=...` format (space-separated). `Key/Value` and `key/value` are both accepted. | `"key=env,value=prod Key=Owner,Value=DevOps"` |
 | `:detach t`     | Detach the policy from the role.                           | `:detach t`            |
 | `:delete t`     | Delete the policy. Recursively deletes versions if needed. | `:delete t`            |
 
@@ -94,6 +96,7 @@ Emacs libraries used: `cl-lib`, `json`, `url-util`, `async`, `promise`, `ob-shel
 | `C-c C-j`  | View a combined JSON of all permission policies.          |
 | `C-c C-a`  | Get service last accessed details for the role.           |
 | `C-c C-m`  | Find the last modified date for the role or its policies. |
+| `C-c C-t`  | Add one or more tags directly to the current role.        |
 | `C-c C-c`  | Inside a source block, apply changes to AWS.              |
 | `C-c (`    | Hide all property drawers.                                |
 | `C-c )`    | Reveal all property drawers.                              |
