@@ -6,12 +6,12 @@ You will be asked to confirm before any change is applied.
 - *To Create a New Policy*: Provide a unique =:policy-name= and optional =:path=. If the ARN does not exist, it will be created.
 - *To Update a Policy*: Edit the JSON. If the policy has reached the version limit, you will be offered to delete the oldest version.
 - *To Tag*: Add the =:tags= header for policy/trust-policy blocks, or press =C-c C-t= to tag the role directly.
-  - *Format*: =:tags= is a quoted AWS tag string (e.g. "Key=Owner,Value=Dev key=stage,value=prod"). =Key/value= and =key/value= are both accepted.
+  - *Format*: =:tags= is a quoted list of tag pairs separated by =", "= (e.g. "owner=hello there, name=noneya").
 
 Use header arguments for specific actions:
 - =:delete t=     :: Deletes the policy. If versions exist, you will be asked to recursively delete them.
 - =:detach t=     :: Detaches the policy from the current role. Can be combined with =:delete t=.
-- =:tags=         :: A *quoted* string of tags (e.g. "Key=Owner,Value=Dev key=stage,value=prod").
+- =:tags=         :: A *quoted* string of tags (e.g. "owner=hello there, name=noneya").
 - =:path=         :: The IAM path for creation (e.g. "/service-role/"). Defaults to "/".
 
 ** Keybindings

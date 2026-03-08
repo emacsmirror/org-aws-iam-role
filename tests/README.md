@@ -11,7 +11,7 @@ It also includes lightweight unit tests for local tag format normalization.
 - `org-aws-iam-role/construct-basic-test` — Builds the internal role struct from the fetched object.
 - `org-aws-iam-role/populate-buffer-basic-test` — Populates a buffer with role details, waits for async fetches, and checks for expected headings.
 - `org-aws-iam-role/regression-test-against-golden-file` — Runs the main view command and compares the buffer output to the golden file after normalizing timestamps.
-- `org-aws-iam-role/normalize-tags-*` and `org-aws-iam-role/tags-valid-p-*` — Validate tag format normalization/validation behavior without AWS calls.
+- `org-aws-iam-role/normalize-tags-*` and `org-aws-iam-role/tags-valid-p-*` — Validate comma+space-delimited tag normalization/validation behavior without AWS calls.
 
 ## Run All Tests (Non-Interactive)
 

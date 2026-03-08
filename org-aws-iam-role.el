@@ -146,19 +146,18 @@ If ROLE-NAME is provided programmatically, skip prompting."
       (message "Buffer is now read-only."))))
 
 (defun org-aws-iam-role--read-tags-from-minibuffer ()
-  "Prompt for tags and return a normalized AWS CLI tag string."
-  (let* ((input (read-string "Tags (e.g. Key=Owner,Value=Dev key=stage,value=prod): "))
+  "Prompt for tags and return a normalized list of tag cons cells."
+  (let* ((input (read-string "Tags (e.g. owner=hello there, name=Will): "))
          (normalized (org-aws-iam-role--normalize-tags input)))
     (unless normalized
-      (user-error "Tags must be in AWS format: \"Key=Owner,Value=Dev key=stage,value=prod\""))
+      (user-error "Tags must be key=value pairs separated by commma and space \", \", e.g. \"owner=hello there, name=Will\""))
     normalized))
 
 ;;;###autoload
 (defun org-aws-iam-role-add-role-tags (&optional role-name tags)
   "Add TAGS to ROLE-NAME.
 When called interactively from a role buffer, ROLE-NAME is inferred.
-TAGS must be a single space-separated list of AWS pairs. Field names
-`key`/`value` and `Key`/`Value` are both accepted."
+TAGS must be key=value pairs separated by commma and space `, '."
   (interactive)
   (org-aws-iam-role--check-auth)
   (let* ((resolved-role-name
@@ -171,13 +170,15 @@ TAGS must be a single space-separated list of AWS pairs. Field names
             (org-aws-iam-role--read-tags-from-minibuffer))
            ((stringp tags)
             (or (org-aws-iam-role--normalize-tags tags)
-                (user-error "Tags must be in AWS format: \"Key=Owner,Value=Dev key=stage,value=prod\"")))
-           (t (user-error "TAGS must be a string in AWS format"))))
+                (user-error "Tags must be key=value pairs separated by \", \", e.g. \"owner=hello there, name=noneya\"")))
+           (t (user-error "TAGS must be a string of key=value pairs separated by \", \""))))
+         (tags-display (org-aws-iam-role--render-tags-for-display normalized-tags))
+         (tags-cli-args (org-aws-iam-role--render-tags-for-cli normalized-tags))
          (cmd (format "aws iam tag-role --role-name %s --tags %s%s"
                       (shell-quote-argument resolved-role-name)
-                      normalized-tags
+                      tags-cli-args
                       (org-aws-iam-role--cli-profile-arg)))
-         (prompt (format "Apply tags '%s' to Role '%s'" normalized-tags resolved-role-name)))
+         (prompt (format "Apply tags '%s' to Role '%s'" tags-display resolved-role-name)))
     (let ((result (org-aws-iam-role--babel-confirm-and-run cmd prompt)))
       (message "%s" result)
       result)))
@@ -212,37 +213,50 @@ Argument TAGS is a list of alists of the form
       (json-encode simple-alist))))
 
 (defun org-aws-iam-role--normalize-tag-pair (pair)
-  "Normalize one AWS CLI tag PAIR.
-Returns the canonical form `Key=...,Value=...`, or nil if PAIR is invalid."
-  (let ((case-fold-search t))
-    (when (string-match
-           "\\`\\([^=,[:space:]]+\\)=\\([^,[:space:]]+\\),\\([^=,[:space:]]+\\)=\\(.+\\)\\'"
-           pair)
-      (let ((field-1 (match-string 1 pair))
-            (tag-key (match-string 2 pair))
-            (field-2 (match-string 3 pair))
-            (tag-value (match-string 4 pair)))
-        (when (and (string= (downcase field-1) "key")
-                   (string= (downcase field-2) "value"))
-          (format "Key=%s,Value=%s" tag-key tag-value))))))
+  "Normalize one tag PAIR.
+PAIR must be in `key=value' form with exactly one `='.
+Leading/trailing whitespace on key is stripped; value is kept as-is.
+Returns a cons cell (KEY . VALUE), or nil if PAIR is invalid."
+  (let ((eq-pos (string-match "=" pair)))
+    (when (and eq-pos
+               ;; Require exactly one '=' to avoid accidental multi-tag parsing.
+               (not (string-match-p "=" (substring pair (1+ eq-pos)))))
+      (let* ((raw-key (substring pair 0 eq-pos))
+             (raw-value (substring pair (1+ eq-pos)))
+             (key (string-trim raw-key)))
+        (when (not (string-empty-p key))
+          (cons key raw-value))))))
 
 (defun org-aws-iam-role--normalize-tags (tags)
   "Normalize TAGS into AWS CLI shorthand format.
-TAGS must be a space-separated list of tag pairs like
-`Key=Owner,Value=Dev` or `key=owner,value=dev`.
-Returns normalized tags, or nil when TAGS is invalid."
+TAGS must be a string of `key=value' pairs separated by `, '.
+Returns a list of (KEY . VALUE) cons cells, or nil when TAGS is invalid."
   (let* ((trimmed (when (stringp tags) (string-trim tags))))
     (unless (or (null trimmed) (string-empty-p trimmed))
-      (let ((parts (split-string trimmed "[[:space:]]+" t))
-            (normalized-parts '())
+      (let ((parts (split-string trimmed ",[ ]+" t))
+            (normalized-pairs '())
             (valid t))
         (dolist (part parts)
-          (let ((normalized (org-aws-iam-role--normalize-tag-pair part)))
-            (if normalized
-                (push normalized normalized-parts)
+          (let ((normalized-pair (org-aws-iam-role--normalize-tag-pair part)))
+            (if normalized-pair
+                (push normalized-pair normalized-pairs)
               (setq valid nil))))
-        (when (and valid normalized-parts)
-          (mapconcat #'identity (nreverse normalized-parts) " "))))))
+        (when (and valid normalized-pairs)
+          (nreverse normalized-pairs))))))
+
+(defun org-aws-iam-role--tag-pair-to-aws-cli (tag-pair)
+  "Convert TAG-PAIR to AWS CLI `Key=...,Value=...' shorthand."
+  (format "Key=%s,Value=%s" (car tag-pair) (cdr tag-pair)))
+
+(defun org-aws-iam-role--render-tags-for-cli (tags)
+  "Render TAGS as a shell-safe string for AWS CLI `--tags'."
+  (mapconcat #'shell-quote-argument
+             (mapcar #'org-aws-iam-role--tag-pair-to-aws-cli tags)
+             " "))
+
+(defun org-aws-iam-role--render-tags-for-display (tags)
+  "Render TAGS as a user-facing string."
+  (mapconcat #'org-aws-iam-role--tag-pair-to-aws-cli tags " "))
 
 (defun org-aws-iam-role--tags-valid-p (tags)
   "Return non-nil when TAGS can be normalized to AWS CLI tag format."
@@ -616,11 +630,11 @@ ROLE-NAME is the name of the parent IAM role."
   (insert "\n- *To Create a New Policy*: Provide a unique =:policy-name= and optional =:path=. If the ARN does not exist, it will be created.\n")
   (insert "- *To Update a Policy*: Edit the JSON. If the policy has reached the version limit, you will be offered to delete the oldest version.\n")
   (insert "- *To Tag*: Add the =:tags= header for policy/trust-policy blocks, or press =C-c C-t= to tag the role directly.\n")
-  (insert "  - *Format*: =:tags= is a quoted AWS tag string (e.g. \"Key=Owner,Value=Dev key=stage,value=prod\"). =Key/value= and =key/value= are both accepted.\n")
+  (insert "  - *Format*: =:tags= is a quoted list of tag pairs separated by =\", \"= (e.g. \"owner=hello there, name=noneya\").\n")
   (insert "\nUse header arguments for specific actions:\n")
   (insert "- =:delete t=     :: Deletes the policy. If versions exist, you will be asked to recursively delete them.\n")
   (insert "- =:detach t=     :: Detaches the policy from the current role. Can be combined with =:delete t=.\n")
-  (insert "- =:tags=         :: A *quoted* string of tags (e.g. \"Key=Owner,Value=Dev key=stage,value=prod\").\n")
+  (insert "- =:tags=         :: A *quoted* string of tags (e.g. \"owner=hello there, name=noneya\").\n")
   (insert "- =:path=         :: The IAM path for creation (e.g. \"/service-role/\"). Defaults to \"/\".\n")
   (insert "\n** Keybindings\n")
   (insert "- =C-c C-e= :: Toggle read-only mode to allow/prevent edits.\n")
@@ -962,15 +976,15 @@ ROLE-NAME is the IAM role name. POLICY-ARN is the ARN of the managed policy."
 POLICY-NAME is the name of the new policy.
 POLICY-DOCUMENT is the policy JSON string.
 PATH is the optional IAM path (e.g., \"/service-role/\").
-TAGS is the optional string of tags (e.g. \"Key=Owner,Value=Me\")."
+TAGS is the optional list of tag pairs, each as \(KEY . VALUE\)."
   (format "aws iam create-policy --policy-name %s --policy-document %s%s%s%s"
           (shell-quote-argument policy-name)
           (shell-quote-argument policy-document)
           (if (and path (not (string-empty-p path)))
               (format " --path %s" (shell-quote-argument path))
             "")
-          (if (and tags (not (string-empty-p tags)))
-              (format " --tags %s" tags) ;; We assume user provides format "Key=K,Value=V ..."
+          (if tags
+              (format " --tags %s" (org-aws-iam-role--render-tags-for-cli tags))
             "")
           (org-aws-iam-role--cli-profile-arg)))
 
@@ -980,38 +994,40 @@ If POLICY-TYPE is \='trust-policy', tags the IAM Role ROLE-NAME.
 If POLICY-TYPE is \='customer-managed', tags the IAM Policy POLICY-ARN.
 Asks for user confirmation before applying.
 Returns nil if no tagging was performed or user aborted."
-  (let ((tags (org-aws-iam-role--normalize-tags tags)))
-    (when (and tags (not (string-empty-p tags)))
+  (let* ((tags (if (stringp tags) (org-aws-iam-role--normalize-tags tags) tags))
+         (tags-display (and tags (org-aws-iam-role--render-tags-for-display tags)))
+         (tags-cli-args (and tags (org-aws-iam-role--render-tags-for-cli tags))))
+    (when tags
       (cond
-     ;; Case 1: Tag the Role (Context is Trust Policy)
-     ((eq policy-type 'trust-policy)
-      (let ((cmd (format "aws iam tag-role --role-name %s --tags %s%s"
-                         (shell-quote-argument role-name)
-                         tags
-                         (org-aws-iam-role--cli-profile-arg)))
-            (prompt (format "Apply tags '%s' to Role '%s'" tags role-name)))
-        (if (y-or-n-p (format "%s? " prompt))
-            (progn
-              (message "Executing: Tag Role...")
-              (shell-command-to-string cmd))
-          (message "Tagging aborted by user."))))
+       ;; Case 1: Tag the Role (Context is Trust Policy)
+       ((eq policy-type 'trust-policy)
+        (let ((cmd (format "aws iam tag-role --role-name %s --tags %s%s"
+                           (shell-quote-argument role-name)
+                           tags-cli-args
+                           (org-aws-iam-role--cli-profile-arg)))
+              (prompt (format "Apply tags '%s' to Role '%s'" tags-display role-name)))
+          (if (y-or-n-p (format "%s? " prompt))
+              (progn
+                (message "Executing: Tag Role...")
+                (shell-command-to-string cmd))
+            (message "Tagging aborted by user."))))
 
-     ;; Case 2: Tag the Managed Policy
-     ((eq policy-type 'customer-managed)
-      (let ((cmd (format "aws iam tag-policy --policy-arn %s --tags %s%s"
-                         (shell-quote-argument policy-arn)
-                         tags
-                         (org-aws-iam-role--cli-profile-arg)))
-            (prompt (format "Apply tags '%s' to Policy '%s'" tags policy-arn)))
-        (if (y-or-n-p (format "%s? " prompt))
-            (progn
-              (message "Executing: Tag Policy...")
-              (shell-command-to-string cmd))
-          (message "Tagging aborted by user."))))
-     
-     ;; Case 3: Inline
-     ((eq policy-type 'inline)
-      (message "Warning: Inline policies cannot be tagged directly. Tag the Role (Trust Policy) instead."))))))
+       ;; Case 2: Tag the Managed Policy
+       ((eq policy-type 'customer-managed)
+        (let ((cmd (format "aws iam tag-policy --policy-arn %s --tags %s%s"
+                           (shell-quote-argument policy-arn)
+                           tags-cli-args
+                           (org-aws-iam-role--cli-profile-arg)))
+              (prompt (format "Apply tags '%s' to Policy '%s'" tags-display policy-arn)))
+          (if (y-or-n-p (format "%s? " prompt))
+              (progn
+                (message "Executing: Tag Policy...")
+                (shell-command-to-string cmd))
+            (message "Tagging aborted by user."))))
+       
+       ;; Case 3: Inline
+       ((eq policy-type 'inline)
+        (message "Warning: Inline policies cannot be tagged directly. Tag the Role (Trust Policy) instead."))))))
 
 (defun org-aws-iam-role--babel-cmd-delete-inline-policy (role-name policy-name)
   "Return the AWS CLI command to delete an inline policy.
@@ -1110,12 +1126,13 @@ If ROLE-NAME is provided, the new policy is attached to it immediately.
 ARGUMENTS: ROLE-NAME, POLICY-NAME, POLICY-TYPE, BODY, PATH, TAGS."
   (if (eq policy-type 'customer-managed)
       (let* ((json-string (json-encode (json-read-from-string body)))
+             (tags-display (if tags (org-aws-iam-role--render-tags-for-display tags) "none"))
              (create-cmd (org-aws-iam-role--babel-cmd-create-policy policy-name json-string path tags))
              (prompt (if role-name
                          (format "Create policy '%s' (path: %s, tags: %s) AND attach to role '%s'"
-                                 policy-name (or path "/") (or tags "none") role-name)
+                                 policy-name (or path "/") tags-display role-name)
                        (format "Create new customer managed policy '%s' (path: %s, tags: %s)"
-                               policy-name (or path "/") (or tags "none")))))
+                               policy-name (or path "/") tags-display))))
         
         (if (y-or-n-p (format "%s? " prompt))
             (progn
@@ -1278,7 +1295,7 @@ PARAMS should include header arguments such as :ROLE-NAME, :POLICY-NAME,
     (when (assoc :tag params)
       (user-error "Unknown header :tag. Did you mean :tags?"))
     (when (and tags (not (stringp tags)))
-      (user-error ":tags must be a quoted string in AWS format, e.g. \"Key=Owner,Value=Dev\""))
+      (user-error ":tags must be a quoted string of key=value pairs separated by \", \", e.g. \"owner=hello there, name=noneya\""))
     (when (stringp tags)
       (setq tags (string-trim tags))
       (when (string-empty-p tags)
@@ -1286,7 +1303,7 @@ PARAMS should include header arguments such as :ROLE-NAME, :POLICY-NAME,
     (when tags
       (setq tags (org-aws-iam-role--normalize-tags tags))
       (unless tags
-        (user-error ":tags must be in AWS format: \"Key=Owner,Value=Dev key=stage,value=prod\"")))
+        (user-error ":tags must be key=value pairs separated by \", \", e.g. \"owner=hello there, name=noneya\"")))
 
     ;; LOGIC FOR CUSTOMER-MANAGED POLICIES ("Upsert" Logic)
     (when (eq policy-type 'customer-managed)
