@@ -70,7 +70,7 @@ Emacs libraries used: `cl-lib`, `json`, `url-util`, `async`, `promise`, `ob-shel
     `M-x org-aws-iam-role-view-details`
 3.  Select a role from the list.
 4.  The buffer will open in read-only mode. To make changes:
-    a.  Press `C-c C-e` to toggle editable mode.
+    a.  Press `C-c C-e` or `C-c e` to toggle editable mode.
     b.  Modify the JSON inside any policy's source block.
     c.  Press `C-c C-c` inside the block to apply the changes to AWS.
     d.  View the success or failure message in the `#+RESULTS:` block that appears.
@@ -91,7 +91,7 @@ Emacs libraries used: `cl-lib`, `json`, `url-util`, `async`, `promise`, `ob-shel
 
 | Keybinding | Description                                               |
 |:-----------|:----------------------------------------------------------|
-| `C-c C-e`  | Toggle read-only mode to allow/prevent edits.             |
+| `C-c C-e`, `C-c e` | Toggle read-only mode to allow/prevent edits.      |
 | `C-c C-s`  | Simulate the role's policies against specific actions.    |
 | `C-c C-j`  | View a combined JSON of all permission policies.          |
 | `C-c C-a`  | Get service last accessed details for the role.           |

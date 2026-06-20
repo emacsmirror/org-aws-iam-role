@@ -54,7 +54,7 @@
 ;; Keybindings:
 ;;
 ;; In the IAM Role Viewer Buffer:
-;; - C-c C-e: Toggle read-only mode to enable/disable editing.
+;; - C-c C-e / C-c e: Toggle read-only mode to enable/disable editing.
 ;; - C-c C-s: Simulate the role's policies against specific actions.
 ;; - C-c C-j: View a combined JSON of all permission policies.
 ;; - C-c C-a: Get service last accessed details for the role.
@@ -101,6 +101,26 @@ If nil, uses default profile or environment credentials.")
 
 (defvar-local org-aws-iam-role-simulate--last-role nil
   "Hold the last IAM Role ARN used for simulate-principal-policy.")
+
+(defun org-aws-iam-role--disable-org-lint-checker ()
+  "Disable `org-lint' Flycheck diagnostics in generated role buffers.
+IAM role buffers intentionally contain custom `aws-iam' Babel blocks and
+AWS action headers.  Some Org/Flycheck versions turn `org-lint' reports for
+those blocks into malformed diagnostics, so keep that checker out of this
+generated UI buffer."
+  (when (boundp 'flycheck-disabled-checkers)
+    (setq-local flycheck-disabled-checkers
+                (cons 'org-lint
+                      (remq 'org-lint flycheck-disabled-checkers))))
+  (when (and (boundp 'flycheck-checker)
+             (eq flycheck-checker 'org-lint))
+    (setq-local flycheck-checker nil))
+  (when (and (bound-and-true-p flycheck-mode)
+             (fboundp 'flycheck-stop))
+    (flycheck-stop))
+  (when (and (bound-and-true-p flycheck-mode)
+             (fboundp 'flycheck-clear-errors))
+    (flycheck-clear-errors)))
 
 ;;;###autoload
 (cl-defun org-aws-iam-role-view-details (&optional role-name)
@@ -637,7 +657,7 @@ ROLE-NAME is the name of the parent IAM role."
   (insert "- =:tags=         :: A *quoted* string of tags (e.g. \"owner=hello there, name=noneya\").\n")
   (insert "- =:path=         :: The IAM path for creation (e.g. \"/service-role/\"). Defaults to \"/\".\n")
   (insert "\n** Keybindings\n")
-  (insert "- =C-c C-e= :: Toggle read-only mode to allow/prevent edits.\n")
+  (insert "- =C-c C-e= or =C-c e= :: Toggle read-only mode to allow/prevent edits.\n")
   (insert "- =C-c C-s= :: Simulate the role's policies against specific actions.\n")
   (insert "- =C-c C-j= :: View a combined JSON of all permission policies.\n")
   (insert "- =C-c C-a= :: Get service last accessed details for the role.\n")
@@ -668,6 +688,7 @@ information."
   (with-current-buffer buf
     (erase-buffer)
     (org-mode)
+    (org-aws-iam-role--disable-org-lint-checker)
     (setq-local org-src-fontify-natively t)
     (org-aws-iam-role--insert-buffer-usage-notes)
     (org-aws-iam-role--insert-role-header role))
@@ -690,6 +711,7 @@ information."
   "Set keybinds, mode, and display the buffer BUF."
   (with-current-buffer buf
     (local-set-key (kbd "C-c C-e") #'org-aws-iam-role-toggle-read-only)
+    (local-set-key (kbd "C-c e") #'org-aws-iam-role-toggle-read-only)
     (local-set-key (kbd "C-c C-s") #'org-aws-iam-role-simulate-from-buffer)
     (local-set-key (kbd "C-c C-j") #'org-aws-iam-role-combine-permissions-from-buffer)
     (local-set-key (kbd "C-c C-a") #'org-aws-iam-role-get-last-accessed)
@@ -1278,7 +1300,7 @@ BODY with header PARAMS to manage IAM policies.
 PARAMS should include header arguments such as :ROLE-NAME, :POLICY-NAME,
 :ARN, :POLICY-TYPE, :PATH, and :TAGS."
   (when buffer-read-only
-    (user-error "Buffer is read-only. Press C-c C-e to enable edits and execution"))
+    (user-error "Buffer is read-only. Press C-c C-e or C-c e to enable edits and execution"))
 
   (let* ((role-name (cdr (assoc :role-name params)))
          (policy-name (cdr (assoc :policy-name params)))

@@ -3,6 +3,18 @@
 (require 'ert)
 (require 'org-aws-iam-role)
 
+(defvar flycheck-disabled-checkers)
+(defvar flycheck-checker)
+
+(ert-deftest org-aws-iam-role/disables-org-lint-flycheck-checker ()
+  "Generated role buffers should not run the flaky `org-lint' checker."
+  (with-temp-buffer
+    (setq-local flycheck-disabled-checkers '(emacs-lisp org-lint))
+    (setq-local flycheck-checker 'org-lint)
+    (org-aws-iam-role--disable-org-lint-checker)
+    (should (equal flycheck-disabled-checkers '(org-lint emacs-lisp)))
+    (should-not flycheck-checker)))
+
 (ert-deftest org-aws-iam-role/normalize-tags-accepts-shorthand-pairs ()
   "Comma+space delimited key=value pairs should be accepted and normalized."
   (should
