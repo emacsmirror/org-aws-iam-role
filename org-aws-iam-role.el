@@ -5,8 +5,8 @@
 ;; Author: William Bosch-Bello <williamsbosch@gmail.com>
 ;; Maintainer: William Bosch-Bello <williamsbosch@gmail.com>
 ;; Created: August 16, 2025
-;; Version: 1.6.6
-;; Package-Version: 1.6.6
+;; Version: 1.6.7
+;; Package-Version: 1.6.7
 ;; Package-Requires: ((emacs "29.1") (async "1.9") (promise "1.1"))
 ;; Keywords: aws, iam, org, babel, tools
 ;; URL: https://github.com/will-abb/org-aws-iam-role
@@ -54,7 +54,7 @@
 ;; Keybindings:
 ;;
 ;; In the IAM Role Viewer Buffer:
-;; - C-c C-e / C-c e: Toggle read-only mode to enable/disable editing.
+;; - C-c C-e: Toggle read-only mode to enable/disable editing.
 ;; - C-c C-s: Simulate the role's policies against specific actions.
 ;; - C-c C-j: View a combined JSON of all permission policies.
 ;; - C-c C-a: Get service last accessed details for the role.
@@ -668,7 +668,7 @@ ROLE-NAME is the name of the parent IAM role."
   (insert "- =:tags=         :: A *quoted* string of tags (e.g. \"owner=hello there, name=noneya\").\n")
   (insert "- =:path=         :: The IAM path for creation (e.g. \"/service-role/\"). Defaults to \"/\".\n")
   (insert "\n** Keybindings\n")
-  (insert "- =C-c C-e= or =C-c e= :: Toggle read-only mode to allow/prevent edits.\n")
+  (insert "- =C-c C-e= :: Toggle read-only mode to allow/prevent edits.\n")
   (insert "- =C-c C-s= :: Simulate the role's policies against specific actions.\n")
   (insert "- =C-c C-j= :: View a combined JSON of all permission policies.\n")
   (insert "- =C-c C-a= :: Get service last accessed details for the role.\n")
@@ -724,7 +724,6 @@ information."
   "Set keybinds, mode, and display the buffer BUF."
   (with-current-buffer buf
     (local-set-key (kbd "C-c C-e") #'org-aws-iam-role-toggle-read-only)
-    (local-set-key (kbd "C-c e") #'org-aws-iam-role-toggle-read-only)
     (local-set-key (kbd "C-c C-s") #'org-aws-iam-role-simulate-from-buffer)
     (local-set-key (kbd "C-c C-j") #'org-aws-iam-role-combine-permissions-from-buffer)
     (local-set-key (kbd "C-c C-a") #'org-aws-iam-role-get-last-accessed)
@@ -1313,7 +1312,7 @@ BODY with header PARAMS to manage IAM policies.
 PARAMS should include header arguments such as :ROLE-NAME, :POLICY-NAME,
 :ARN, :POLICY-TYPE, :PATH, and :TAGS."
   (when buffer-read-only
-    (user-error "Buffer is read-only. Press C-c C-e or C-c e to enable edits and execution"))
+    (user-error "Buffer is read-only. Press C-c C-e to enable edits and execution"))
 
   (let* ((role-name (cdr (assoc :role-name params)))
          (policy-name (cdr (assoc :policy-name params)))
