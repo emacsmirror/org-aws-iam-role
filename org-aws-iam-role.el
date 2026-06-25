@@ -5,8 +5,8 @@
 ;; Author: William Bosch-Bello <williamsbosch@gmail.com>
 ;; Maintainer: William Bosch-Bello <williamsbosch@gmail.com>
 ;; Created: August 16, 2025
-;; Version: 1.6.6
-;; Package-Version: 1.6.6
+;; Version: 1.6.7
+;; Package-Version: 1.6.7
 ;; Package-Requires: ((emacs "29.1") (async "1.9") (promise "1.1"))
 ;; Keywords: aws, iam, org, babel, tools
 ;; URL: https://github.com/will-abb/org-aws-iam-role
@@ -78,6 +78,7 @@
 (require 'org)
 (require 'org-element)
 
+(defvar async-prompt-for-password)
 
 (add-to-list 'org-babel-load-languages '(shell . t))
 (add-to-list 'org-src-lang-modes '("aws-iam" . json))
@@ -101,6 +102,39 @@ If nil, uses default profile or environment credentials.")
 
 (defvar-local org-aws-iam-role-simulate--last-role nil
   "Hold the last IAM Role ARN used for simulate-principal-policy.")
+
+(defun org-aws-iam-role--disable-org-lint-checker ()
+  "Disable `org-lint' Flycheck diagnostics in generated role buffers.
+IAM role buffers intentionally contain custom `aws-iam' Babel blocks and
+AWS action headers.  Some Org/Flycheck versions turn `org-lint' reports for
+those blocks into malformed diagnostics, so keep that checker out of this
+generated UI buffer."
+  (when (boundp 'flycheck-disabled-checkers)
+    (setq-local flycheck-disabled-checkers
+                (cons 'org-lint
+                      (remq 'org-lint flycheck-disabled-checkers))))
+  (when (and (boundp 'flycheck-checker)
+             (eq flycheck-checker 'org-lint))
+    (setq-local flycheck-checker nil))
+  (when (and (bound-and-true-p flycheck-mode)
+             (fboundp 'flycheck-stop))
+    (flycheck-stop))
+  (when (and (bound-and-true-p flycheck-mode)
+             (fboundp 'flycheck-clear-errors))
+    (flycheck-clear-errors)))
+
+(defun org-aws-iam-role--async-shell-command-to-string (cmd)
+  "Run CMD asynchronously and resolve with its output string.
+AWS policy JSON can contain strings that match TRAMP's password prompt
+regexp, such as Lambda event-source-mapping ARNs.  Disable async.el password
+forwarding for these non-interactive AWS CLI fetches to avoid false
+`read-passwd' prompts while rendering role buffers."
+  (let ((async-prompt-for-password nil))
+    (promise:async-start `(lambda () (shell-command-to-string ,cmd)))))
+
+(defun org-aws-iam-role--buffer-live-p (buf)
+  "Return non-nil when BUF is still an existing buffer."
+  (and (bufferp buf) (buffer-live-p buf)))
 
 ;;;###autoload
 (cl-defun org-aws-iam-role-view-details (&optional role-name)
@@ -300,9 +334,8 @@ Returns a promise that resolves with the raw JSON string from the
 `get-policy` command."
   (let* ((cmd (format "aws iam get-policy --policy-arn %s --output json%s"
                       (shell-quote-argument policy-arn)
-                      (org-aws-iam-role--cli-profile-arg)))
-         (start-func `(lambda () (shell-command-to-string ,cmd))))
-    (promise:async-start start-func)))
+                      (org-aws-iam-role--cli-profile-arg))))
+    (org-aws-iam-role--async-shell-command-to-string cmd)))
 
 (defun org-aws-iam-role--policy-get-version-document-async (policy-arn version-id)
   "Fetch policy document JSON for POLICY-ARN and VERSION-ID.
@@ -311,9 +344,8 @@ Returns a promise that resolves with the raw JSON string."
   (let* ((cmd (format "aws iam get-policy-version --policy-arn %s --version-id %s --output json%s"
                       (shell-quote-argument policy-arn)
                       (shell-quote-argument version-id)
-                      (org-aws-iam-role--cli-profile-arg)))
-         (start-func `(lambda () (shell-command-to-string ,cmd))))
-    (promise:async-start start-func)))
+                      (org-aws-iam-role--cli-profile-arg))))
+    (org-aws-iam-role--async-shell-command-to-string cmd)))
 
 (defun org-aws-iam-role-policy--construct-from-data (metadata policy-type document-json)
   "Construct an `org-aws-iam-role-policy` struct from resolved data.
@@ -397,9 +429,8 @@ Returns a promise that resolves with the `org-aws-iam-role-policy` struct."
   (let* ((cmd (format "aws iam get-role-policy --role-name %s --policy-name %s --output json%s"
                       (shell-quote-argument role-name)
                       (shell-quote-argument policy-name)
-                      (org-aws-iam-role--cli-profile-arg)))
-         (start-func `(lambda () (shell-command-to-string ,cmd))))
-    (promise-chain (promise:async-start start-func)
+                      (org-aws-iam-role--cli-profile-arg))))
+    (promise-chain (org-aws-iam-role--async-shell-command-to-string cmd)
       (then (lambda (json)
               (org-aws-iam-role-inline-policy--construct-from-json policy-name json))))))
 
@@ -651,15 +682,16 @@ ROLE-NAME is the name of the parent IAM role."
   "Callback to populate BUF with fetched policies for ROLE.
 ALL-POLICIES-VECTOR is the resolved vector of policy structs."
   ;; Catch any error during rendering to prevent the callback from crashing.
-  (condition-case err
-      (with-current-buffer buf
-        (let ((boundary-arn (org-aws-iam-role-permissions-boundary-arn role))
-              (role-name (org-aws-iam-role-name role)))
-          ;; Insert the fetched policy sections.
-          (org-aws-iam-role--insert-policies-section all-policies-vector boundary-arn role-name)
-          ;; Insert remaining synchronous sections and finalize the buffer.
-          (org-aws-iam-role--insert-remaining-sections-and-finalize role buf)))
-    (error (message "Error populating buffer: %s" (error-message-string err)))))
+  (when (org-aws-iam-role--buffer-live-p buf)
+    (condition-case err
+        (with-current-buffer buf
+          (let ((boundary-arn (org-aws-iam-role-permissions-boundary-arn role))
+                (role-name (org-aws-iam-role-name role)))
+            ;; Insert the fetched policy sections.
+            (org-aws-iam-role--insert-policies-section all-policies-vector boundary-arn role-name)
+            ;; Insert remaining synchronous sections and finalize the buffer.
+            (org-aws-iam-role--insert-remaining-sections-and-finalize role buf)))
+      (error (message "Error populating buffer: %s" (error-message-string err))))))
 
 (defun org-aws-iam-role--populate-role-buffer (role buf)
   "Insert all details for ROLE and its policies into the buffer BUF.
@@ -668,6 +700,7 @@ information."
   (with-current-buffer buf
     (erase-buffer)
     (org-mode)
+    (org-aws-iam-role--disable-org-lint-checker)
     (setq-local org-src-fontify-natively t)
     (org-aws-iam-role--insert-buffer-usage-notes)
     (org-aws-iam-role--insert-role-header role))
@@ -681,10 +714,11 @@ information."
          (lambda (all-policies-vector)
            (org-aws-iam-role--populate-buffer-async-callback all-policies-vector role buf)))
       ;; Case where there are no policies of any kind.
-      (with-current-buffer buf
-        (insert "** Permission Policies\n")
-        (insert "nil\n")
-        (org-aws-iam-role--insert-remaining-sections-and-finalize role buf)))))
+      (when (org-aws-iam-role--buffer-live-p buf)
+        (with-current-buffer buf
+          (insert "** Permission Policies\n")
+          (insert "nil\n")
+          (org-aws-iam-role--insert-remaining-sections-and-finalize role buf))))))
 
 (defun org-aws-iam-role--finalize-and-display-role-buffer (buf)
   "Set keybinds, mode, and display the buffer BUF."

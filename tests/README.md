@@ -3,7 +3,8 @@
 This directory contains ERT integration tests that exercise `org-aws-iam-role` end to end against AWS.
 They fetch a real role, build the buffer, and (for the regression test) compare the generated buffer
 to the golden file in `tests/fixtures/integration-e2e-test-output.org` after normalizing timestamps.
-It also includes lightweight unit tests for local tag format normalization.
+It also includes lightweight unit tests for local tag format normalization,
+generated-buffer lint suppression, and async rendering regressions.
 
 ## Test Summary
 
@@ -12,6 +13,9 @@ It also includes lightweight unit tests for local tag format normalization.
 - `org-aws-iam-role/populate-buffer-basic-test` — Populates a buffer with role details, waits for async fetches, and checks for expected headings.
 - `org-aws-iam-role/regression-test-against-golden-file` — Runs the main view command and compares the buffer output to the golden file after normalizing timestamps.
 - `org-aws-iam-role/normalize-tags-*` and `org-aws-iam-role/tags-valid-p-*` — Validate comma+space-delimited tag normalization/validation behavior without AWS calls.
+- `org-aws-iam-role/disables-org-lint-flycheck-checker` — Verifies generated IAM role buffers locally disable the flaky `org-lint` Flycheck checker.
+- `org-aws-iam-role/async-shell-command-disables-password-prompt` — Verifies async AWS fetches do not trigger false `read-passwd` prompts from policy JSON.
+- `org-aws-iam-role/async-callback-ignores-killed-buffer` — Verifies late async callbacks ignore killed role buffers.
 
 ## Run All Tests (Non-Interactive)
 
@@ -19,7 +23,7 @@ It also includes lightweight unit tests for local tag format normalization.
 emacs -Q --batch -L . -l tests/integration-e2e-test.el -f ert-run-tests-batch-and-exit
 ```
 
-## Run Tag Unit Tests Only (No AWS Calls)
+## Run Unit Tests Only (No AWS Calls)
 
 ```sh
 emacs -Q --batch -L . -l tests/tag-format-test.el -f ert-run-tests-batch-and-exit
@@ -33,7 +37,8 @@ emacs -Q --batch -L . -l tests/tag-format-test.el -f ert-run-tests-batch-and-exi
 
 ## Notes
 
+- All test commands require the package dependencies `async` and `promise` to be available on `load-path`.
 - Tests require AWS access and use the profile `williseed-iam-tester` (set in the test file).
 - The main regression test is `org-aws-iam-role/regression-test-against-golden-file`. Load/eval the package and test file before running it in an interactive session.
 - The regression test can be finicky on first run; if it aborts, run it a second time.
-- Tests wait ~15 seconds for async policy fetches; large roles can take a while to load.
+- Async rendering tests poll for generated buffer content for up to 60 seconds; large roles can take a while to load.

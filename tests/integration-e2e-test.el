@@ -10,6 +10,50 @@
           (file-name-directory buffer-file-name)
           default-directory))
 
+(defvar org-aws-iam-role-test-async-timeout 60
+  "Seconds to wait for async IAM role buffer rendering in integration tests.")
+
+(defun org-aws-iam-role-test--buffer-matches-p (buffer regexp)
+  "Return non-nil when BUFFER contains REGEXP."
+  (when (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (save-excursion
+        (goto-char (point-min))
+        (re-search-forward regexp nil t)))))
+
+(defun org-aws-iam-role-test--wait-for-buffer-regexp (buffer regexp &optional timeout)
+  "Wait until BUFFER contains REGEXP, or until TIMEOUT seconds elapse."
+  (let ((deadline (+ (float-time) (or timeout org-aws-iam-role-test-async-timeout)))
+        found)
+    (while (and (not found)
+                (buffer-live-p buffer)
+                (< (float-time) deadline))
+      (setq found (org-aws-iam-role-test--buffer-matches-p buffer regexp))
+      (unless found
+        (accept-process-output nil 0.25)))
+    found))
+
+(defun org-aws-iam-role-test--find-role-buffer (role-name)
+  "Find an IAM role buffer for ROLE-NAME."
+  (cl-find-if (lambda (buf)
+                (string-match-p
+                 (concat "\\*IAM Role: " (regexp-quote role-name))
+                 (buffer-name buf)))
+              (buffer-list)))
+
+(defun org-aws-iam-role-test--wait-for-role-buffer-regexp (role-name regexp &optional timeout)
+  "Wait until ROLE-NAME's IAM role buffer exists and contains REGEXP."
+  (let ((deadline (+ (float-time) (or timeout org-aws-iam-role-test-async-timeout)))
+        role-buffer)
+    (while (and (not (and role-buffer
+                          (org-aws-iam-role-test--buffer-matches-p role-buffer regexp)))
+                (< (float-time) deadline))
+      (setq role-buffer (org-aws-iam-role-test--find-role-buffer role-name))
+      (unless (and role-buffer
+                   (org-aws-iam-role-test--buffer-matches-p role-buffer regexp))
+        (accept-process-output nil 0.25)))
+    role-buffer))
+
 ;; First test: basic fetch
 (ert-deftest org-aws-iam-role/get-full-basic-test ()
   "Call `org-aws-iam-role--get-full` with a test role and log result."
@@ -39,8 +83,11 @@
            (role-struct (org-aws-iam-role--construct role-obj)))
       (with-temp-buffer
         (org-aws-iam-role--populate-role-buffer role-struct (current-buffer))
-        ;; CRITICAL: We must wait for the asynchronous policy fetching to complete.
-        (sleep-for 15)
+        ;; CRITICAL: We must wait for asynchronous policy fetching to complete.
+        (should
+         (org-aws-iam-role-test--wait-for-buffer-regexp
+          (current-buffer)
+          "^\\*\\* Permission Policies"))
         (goto-char (point-min))
         (let ((buf-str (buffer-string)))
           (message "DEBUG buffer-start=%s"
@@ -70,14 +117,11 @@
 
     ;; Call the main entry point to create the buffer.
     (org-aws-iam-role-view-details test-role-name)
-    (sleep-for 15)
 
     (let* ((role-buffer
-            (cl-find-if (lambda (buf)
-                          (string-match-p
-                           (concat "\\*IAM Role: " (regexp-quote test-role-name))
-                           (buffer-name buf)))
-                        (buffer-list)))
+            (org-aws-iam-role-test--wait-for-role-buffer-regexp
+             test-role-name
+             "^\\*\\* Permission Policies"))
            (actual-content
             (when role-buffer
               (with-current-buffer role-buffer
