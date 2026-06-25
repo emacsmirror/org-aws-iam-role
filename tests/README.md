@@ -41,4 +41,4 @@ emacs -Q --batch -L . -l tests/tag-format-test.el -f ert-run-tests-batch-and-exi
 - Tests require AWS access and use the profile `williseed-iam-tester` (set in the test file).
 - The main regression test is `org-aws-iam-role/regression-test-against-golden-file`. Load/eval the package and test file before running it in an interactive session.
 - The regression test can be finicky on first run; if it aborts, run it a second time.
-- Tests wait ~15 seconds for async policy fetches; large roles can take a while to load.
+- Async rendering tests poll for generated buffer content for up to 60 seconds; large roles can take a while to load.
